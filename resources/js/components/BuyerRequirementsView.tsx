@@ -345,3 +345,4 @@ export const BuyerRequirementsView: React.FC<BuyerRequirementsViewProps> = ({
         </div>
     );
 };
+
