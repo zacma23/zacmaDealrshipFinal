@@ -63,3 +63,4 @@ class FaqAndTroubleshootingKnowledge
 TEXT;
     }
 }
+

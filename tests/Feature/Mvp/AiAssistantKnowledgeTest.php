@@ -183,3 +183,4 @@ class AiAssistantKnowledgeTest extends TestCase
             ->assertJson(['success' => true]);
     }
 }
+

@@ -47,7 +47,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Portal entry route
     Route::get('/dashboard', function () {
-        return redirect(auth()->user()->getDashboardUrl());
+        return redirect('/');
     })->name('dashboard');
 });
 
@@ -151,6 +151,29 @@ Route::get('/marketplace', function () {
     return view('app');
 })->name('marketplace.index');
 
+$spaFrontendRoutes = [
+    '/browse',
+    '/my-listings',
+    '/crm-leads',
+    '/favorites',
+    '/saved',
+    '/messages',
+    '/messages/{id?}',
+    '/requirements',
+    '/buyer-requirements',
+    '/pricing',
+    '/plans',
+    '/admin',
+    '/settings',
+    '/listings/{slug}',
+];
+
+foreach ($spaFrontendRoutes as $path) {
+    Route::get($path, function () {
+        return view('app');
+    });
+}
+
 Route::get('/profile/{username}', function ($username) {
     return view('app');
 })->name('profile.public');
@@ -172,4 +195,12 @@ Route::post('/checkout/mock-chapa/{reference}/complete', function ($reference, \
 Route::get('/app/{any?}', function () {
     return view('app');
 })->where('any', '.*');
+
+// Catch-all fallback for SPA client-side routing (excluding api/*)
+Route::fallback(function (\Illuminate\Http\Request $request) {
+    if ($request->is('api/*')) {
+        return response()->json(['message' => 'API endpoint not found.'], 404);
+    }
+    return view('app');
+});
 

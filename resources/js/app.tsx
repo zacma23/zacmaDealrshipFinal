@@ -11,6 +11,7 @@ import { CrmLeadsView } from './components/CrmLeadsView';
 import { FavoritesView } from './components/FavoritesView';
 import { SubscriptionView } from './components/SubscriptionView';
 import { PublicProfileView } from './components/PublicProfileView';
+import { ProfileSettingsView } from './components/ProfileSettingsView';
 import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { MessagesView } from './components/MessagesView';
@@ -24,43 +25,132 @@ declare global {
     }
 }
 
+const getPathForTab = (tab: string, username?: string | null): string => {
+    switch (tab) {
+        case 'browse': return '/browse';
+        case 'my-listings': return '/my-listings';
+        case 'crm-leads': return '/crm-leads';
+        case 'favorites': return '/favorites';
+        case 'messages': return '/messages';
+        case 'requirements': return '/requirements';
+        case 'pricing': return '/pricing';
+        case 'admin': return '/admin';
+        case 'profile': return '/profile';
+        case 'public-profile': return username ? `/profile/${username}` : '/browse';
+        default: return '/';
+    }
+};
+
+const resolveRoute = (): { tab: string; username: string | null; authModal: 'login' | 'register' | null } => {
+    const path = window.location.pathname.toLowerCase();
+    const search = new URLSearchParams(window.location.search);
+
+    if (search.get('payment') === 'success') {
+        return { tab: 'pricing', username: null, authModal: null };
+    }
+    if (search.get('auth') === 'login' || path === '/login') {
+        return { tab: 'browse', username: null, authModal: 'login' };
+    }
+    if (search.get('auth') === 'register' || path === '/register') {
+        return { tab: 'browse', username: null, authModal: 'register' };
+    }
+
+    if (path.startsWith('/profile/')) {
+        const u = window.location.pathname.replace(/^\/profile\//i, '').split('/')[0];
+        if (u) {
+            return { tab: 'public-profile', username: decodeURIComponent(u), authModal: null };
+        }
+    }
+    if (path === '/profile' || path === '/settings' || path === '/account') {
+        return { tab: 'profile', username: null, authModal: null };
+    }
+    if (path === '/my-listings') {
+        return { tab: 'my-listings', username: null, authModal: null };
+    }
+    if (path === '/crm-leads' || path === '/leads') {
+        return { tab: 'crm-leads', username: null, authModal: null };
+    }
+    if (path === '/favorites' || path === '/saved') {
+        return { tab: 'favorites', username: null, authModal: null };
+    }
+    if (path === '/messages' || path.startsWith('/messages/')) {
+        return { tab: 'messages', username: null, authModal: null };
+    }
+    if (path === '/requirements' || path === '/buyer-requirements') {
+        return { tab: 'requirements', username: null, authModal: null };
+    }
+    if (path === '/pricing' || path === '/plans' || path === '/subscriptions') {
+        return { tab: 'pricing', username: null, authModal: null };
+    }
+    if (path === '/admin') {
+        return { tab: 'admin', username: null, authModal: null };
+    }
+
+    return { tab: 'browse', username: null, authModal: null };
+};
+
 export const App: React.FC = () => {
+    const initialRoute = resolveRoute();
     const [user, setUser] = useState<User | null>(window.__INITIAL_USER__ || null);
-    const [activeTab, setActiveTab] = useState<string>('browse');
+    const [activeTab, setActiveTab] = useState<string>(initialRoute.tab);
     const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
-    const [viewingUsername, setViewingUsername] = useState<string | null>(null);
+    const [viewingUsername, setViewingUsername] = useState<string | null>(initialRoute.username);
     const [chatRecipientId, setChatRecipientId] = useState<number | null>(null);
     const [chatListingId, setChatListingId] = useState<number | null>(null);
 
     const [postListingOpen, setPostListingOpen] = useState(false);
-    const [authModalOpen, setAuthModalOpen] = useState<'login' | 'register' | null>(null);
+    const [authModalOpen, setAuthModalOpen] = useState<'login' | 'register' | null>(initialRoute.authModal);
     const [crmNewCount, setCrmNewCount] = useState(0);
 
-    // Initial check for route or user
-    useEffect(() => {
-        // If profile path in URL
-        const path = window.location.pathname;
-        if (path.startsWith('/profile/')) {
-            const u = path.replace('/profile/', '').split('/')[0];
-            if (u) {
-                setViewingUsername(u);
-                setActiveTab('public-profile');
-            }
+    const navigateTo = (tab: string, extra: { username?: string | null; push?: boolean } = {}) => {
+        const { username = null, push = true } = extra;
+        setActiveTab(tab);
+        if (tab === 'public-profile') {
+            setViewingUsername(username);
+        } else {
+            setViewingUsername(null);
         }
 
-        // Try to fetch current user if token exists in localStorage but window user is null
+        if (push) {
+            const targetPath = getPathForTab(tab, username);
+            if (window.location.pathname !== targetPath) {
+                window.history.pushState({ tab, username }, '', targetPath);
+            }
+        }
+    };
+
+    // Listen to browser Back and Forward navigation (popstate)
+    useEffect(() => {
+        const handlePopState = (e: PopStateEvent) => {
+            if (e.state && e.state.tab) {
+                setActiveTab(e.state.tab);
+                setViewingUsername(e.state.username || null);
+            } else {
+                const route = resolveRoute();
+                setActiveTab(route.tab);
+                setViewingUsername(route.username);
+                if (route.authModal) {
+                    setAuthModalOpen(route.authModal);
+                }
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    // Initial check for auth state or refresh user
+    useEffect(() => {
         const token = localStorage.getItem('zacma_auth_token');
         if (token || window.__INITIAL_USER__) {
             api.getMe()
                 .then(u => {
                     setUser(u);
-                    // Fetch CRM leads count for notification badge
                     api.getCrmLeads({ status: 'New' })
                         .then(res => setCrmNewCount(res.counts?.new || 0))
                         .catch(() => {});
                 })
                 .catch(() => {
-                    // Token expired or invalid
                     if (!window.__INITIAL_USER__) {
                         localStorage.removeItem('zacma_auth_token');
                         setUser(null);
@@ -91,13 +181,12 @@ export const App: React.FC = () => {
     const handleLogout = async () => {
         await api.logout();
         setUser(null);
-        setActiveTab('browse');
+        navigateTo('browse');
     };
 
     const handleViewSellerProfile = (username: string) => {
         setSelectedListing(null);
-        setViewingUsername(username);
-        setActiveTab('public-profile');
+        navigateTo('public-profile', { username });
     };
 
     return (
@@ -105,10 +194,7 @@ export const App: React.FC = () => {
             <Navbar
                 user={user}
                 activeTab={activeTab}
-                onTabChange={(tab) => {
-                    setActiveTab(tab);
-                    if (tab !== 'public-profile') setViewingUsername(null);
-                }}
+                onTabChange={(tab) => navigateTo(tab)}
                 onOpenPostListing={() => setPostListingOpen(true)}
                 onOpenAuth={(mode) => setAuthModalOpen(mode)}
                 onLogout={handleLogout}
@@ -127,7 +213,7 @@ export const App: React.FC = () => {
                     <MyListingsView
                         user={user}
                         onOpenPostListing={() => setPostListingOpen(true)}
-                        onNavigatePricing={() => setActiveTab('pricing')}
+                        onNavigatePricing={() => navigateTo('pricing')}
                         onSelectListing={(listing) => setSelectedListing(listing)}
                     />
                 )}
@@ -139,7 +225,7 @@ export const App: React.FC = () => {
                 {activeTab === 'favorites' && user && (
                     <FavoritesView
                         onSelectListing={(listing) => setSelectedListing(listing)}
-                        onBrowseMarket={() => setActiveTab('browse')}
+                        onBrowseMarket={() => navigateTo('browse')}
                     />
                 )}
 
@@ -157,7 +243,7 @@ export const App: React.FC = () => {
                         onDirectMessage={(sellerId) => {
                             setChatRecipientId(sellerId);
                             setChatListingId(null);
-                            setActiveTab('messages');
+                            navigateTo('messages');
                         }}
                     />
                 )}
@@ -168,8 +254,7 @@ export const App: React.FC = () => {
                         initialRecipientId={chatRecipientId}
                         initialListingId={chatListingId}
                         onViewListing={(slug) => {
-                            // Can select or browse
-                            setActiveTab('browse');
+                            navigateTo('browse');
                         }}
                     />
                 )}
@@ -178,12 +263,34 @@ export const App: React.FC = () => {
                     <PublicProfileView
                         username={viewingUsername}
                         onBack={() => {
-                            setViewingUsername(null);
-                            setActiveTab('browse');
+                            navigateTo('browse');
                         }}
                         onSelectListing={(listing) => setSelectedListing(listing)}
                         onToggleFavorite={handleToggleFavorite}
                     />
+                )}
+
+                {activeTab === 'profile' && (
+                    user ? (
+                        <ProfileSettingsView
+                            user={user}
+                            onUserUpdated={(updatedUser) => setUser(updatedUser)}
+                            onNavigateTab={(tab, extra) => navigateTo(tab, extra)}
+                        />
+                    ) : (
+                        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200/80 p-8 max-w-md mx-auto shadow-xs">
+                            <h3 className="text-lg font-black text-slate-800">Sign In Required</h3>
+                            <p className="text-xs text-slate-500 mt-1 mb-5">
+                                You need to be logged in to view and edit your profile settings and dealership credentials.
+                            </p>
+                            <button
+                                onClick={() => setAuthModalOpen('login')}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition"
+                            >
+                                Log In to Your Account
+                            </button>
+                        </div>
+                    )
                 )}
 
                 {activeTab === 'admin' && user?.is_super_admin && (
@@ -201,7 +308,7 @@ export const App: React.FC = () => {
                 onStartChat={(sellerId, listingId) => {
                     setChatRecipientId(sellerId);
                     setChatListingId(listingId);
-                    setActiveTab('messages');
+                    navigateTo('messages');
                 }}
             />
 
@@ -210,13 +317,12 @@ export const App: React.FC = () => {
                     user={user}
                     onClose={() => setPostListingOpen(false)}
                     onListingCreated={() => {
-                        setActiveTab('my-listings');
-                        // Refresh user quota
+                        navigateTo('my-listings');
                         api.getMe().then(u => setUser(u));
                     }}
                     onNavigatePricing={() => {
                         setPostListingOpen(false);
-                        setActiveTab('pricing');
+                        navigateTo('pricing');
                     }}
                     onRequireLogin={() => setAuthModalOpen('login')}
                 />
@@ -237,7 +343,7 @@ export const App: React.FC = () => {
                 user={user}
                 activeTab={activeTab}
                 onNavigateTab={(tab) => {
-                    setActiveTab(tab);
+                    navigateTo(tab);
                 }}
             />
 
@@ -252,8 +358,8 @@ export const App: React.FC = () => {
                         <span>• Built for Ethiopia (ETB & Chapa)</span>
                     </div>
                     <div className="flex items-center gap-6">
-                        <button onClick={() => setActiveTab('browse')} className="hover:text-slate-800">Browse Listings</button>
-                        <button onClick={() => setActiveTab('pricing')} className="hover:text-slate-800">Pricing & Limits</button>
+                        <button onClick={() => navigateTo('browse')} className="hover:text-slate-800">Browse Listings</button>
+                        <button onClick={() => navigateTo('pricing')} className="hover:text-slate-800">Pricing & Limits</button>
                         <span>© 2026 Zacma PLC</span>
                     </div>
                 </div>
@@ -267,4 +373,3 @@ if (container) {
     const root = createRoot(container);
     root.render(<App />);
 }
-

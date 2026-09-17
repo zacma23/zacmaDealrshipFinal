@@ -21,3 +21,4 @@ class PlatformKnowledge
 TEXT;
     }
 }
+

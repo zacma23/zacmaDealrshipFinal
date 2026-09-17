@@ -340,6 +340,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                                 >
                                     Messages
                                 </button>
+                                <button
+                                    onClick={() => { onTabChange('profile'); setMobileMenuOpen(false); }}
+                                    className="text-left px-3 py-2 text-sm font-semibold rounded-lg hover:bg-slate-100 text-slate-800"
+                                >
+                                    Profile Settings
+                                </button>
                             </>
                         )}
                         <button

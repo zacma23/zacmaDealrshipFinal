@@ -45,3 +45,4 @@ The platform operates a pluggable `PaymentGatewayInterface` supporting domestic 
 TEXT;
     }
 }
+

@@ -15,9 +15,9 @@ class AuthController extends Controller
     public function showLogin()
     {
         if (Auth::check()) {
-            return redirect(Auth::user()->getDashboardUrl());
+            return redirect('/');
         }
-        return view('auth.login');
+        return view('app');
     }
 
     public function login(Request $request)
@@ -51,13 +51,15 @@ class AuthController extends Controller
 
         AuditLog::log('auth.login', $user, null, ['ip' => $request->ip()], $user->organization_id, $user->id);
 
-        return redirect()->intended($user->getDashboardUrl());
+        return redirect()->intended('/');
     }
 
     public function showRegister()
     {
-        $organizations = Organization::where('status', 'active')->get();
-        return view('auth.register', compact('organizations'));
+        if (Auth::check()) {
+            return redirect('/');
+        }
+        return view('app');
     }
 
     public function register(Request $request)
@@ -99,7 +101,7 @@ class AuthController extends Controller
                 \Log::warning('AuditLog register: ' . $logError->getMessage());
             }
 
-            return redirect($user->getDashboardUrl())->with('success', 'Registration successful! Welcome to Zacma.');
+            return redirect('/')->with('success', 'Registration successful! Welcome to Zacma.');
         } catch (\Throwable $e) {
             \Log::error('Register error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             return back()->withInput()->with('error', 'Registration error: ' . $e->getMessage());

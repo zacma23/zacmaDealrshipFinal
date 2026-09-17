@@ -347,3 +347,4 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({
         </>
     );
 };
+

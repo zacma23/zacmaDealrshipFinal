@@ -16,10 +16,7 @@ class ProfileController extends Controller
      */
     public function edit(Request $request)
     {
-        $user = Auth::user();
-        $org = $user->organization;
-
-        return view('profile.edit', compact('user', 'org'));
+        return view('app');
     }
 
     /**

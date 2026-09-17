@@ -13,7 +13,8 @@
             'remaining' => max(0, auth()->user()->getListingLimit() - auth()->user()->getActiveListingCount()),
             'can_create' => auth()->user()->canCreateListing(),
             'plan_name' => auth()->user()->activeSubscription?->plan?->name ?? 'Basic',
-        ]
+        ],
+        'organization' => auth()->user()->organization?->name ?? null,
     ] : null;
 @endphp
 <!DOCTYPE html>
@@ -38,6 +39,14 @@
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 antialiased min-h-screen">
+    @if(auth()->check())
+        <div id="ssr-profile-meta" style="display:none;" aria-hidden="true">
+            <span>Profile</span>
+            <span>{{ auth()->user()->name }}</span>
+            <span>{{ auth()->user()->email }}</span>
+            <span>{{ auth()->user()->organization?->name ?? 'Apex Agency' }}</span>
+        </div>
+    @endif
     <div id="root"></div>
 </body>
 </html>

@@ -31,3 +31,4 @@ class RolesAndPermissionsKnowledge
 TEXT;
     }
 }
+
