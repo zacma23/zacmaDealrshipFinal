@@ -169,6 +169,8 @@ $spaFrontendRoutes = [
     '/leads',
     '/subscriptions',
     '/listings/{slug}',
+    '/category/{type}',
+    '/browse/{type?}',
 ];
 
 foreach ($spaFrontendRoutes as $path) {

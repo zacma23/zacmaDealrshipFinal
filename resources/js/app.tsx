@@ -1,8 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Listing, User } from './types/marketplace';
 import { api } from './services/api';
 import { Navbar } from './components/Navbar';
+
+// ─── Global Error Boundary ────────────────────────────────────────────────────
+// Prevents a render error in any child from unmounting the entire app shell.
+interface EBState { hasError: boolean; error?: Error }
+class ErrorBoundary extends Component<{ children: ReactNode }, EBState> {
+    constructor(props: { children: ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError(error: Error): EBState {
+        return { hasError: true, error };
+    }
+    componentDidCatch(error: Error, info: ErrorInfo) {
+        console.error('[ErrorBoundary] Caught render error:', error, info);
+    }
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+                    <h2 style={{ color: '#0f172a', marginBottom: '8px' }}>Something went wrong</h2>
+                    <p style={{ fontSize: '13px' }}>{this.state.error?.message}</p>
+                    <button
+                        style={{ marginTop: '16px', padding: '8px 20px', background: '#059669', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+                        onClick={() => { this.setState({ hasError: false }); window.location.href = '/browse'; }}
+                    >
+                        Return to Browse
+                    </button>
+                </div>
+            );
+        }
+        return this.props.children;
+    }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 import { MarketplaceBrowse } from './components/MarketplaceBrowse';
 import { ListingDetailModal } from './components/ListingDetailModal';
 import { AddListingModal } from './components/AddListingModal';
@@ -92,6 +126,11 @@ const resolveRoute = (): { tab: string; username: string | null; authModal: 'log
     }
     if (path === '/admin') {
         return { tab: 'admin', username: null, authModal: null, listingSlug: null };
+    }
+
+    // /category/* and /browse/* sub-paths → resolve to browse tab
+    if (path.startsWith('/category/') || path.startsWith('/browse/')) {
+        return { tab: 'browse', username: null, authModal: null, listingSlug: null };
     }
 
     return { tab: 'browse', username: null, authModal: null, listingSlug: null };
@@ -509,5 +548,9 @@ export const App: React.FC = () => {
 const container = document.getElementById('root');
 if (container) {
     const root = createRoot(container);
-    root.render(<App />);
+    root.render(
+        <ErrorBoundary>
+            <App />
+        </ErrorBoundary>
+    );
 }
