@@ -1,6 +1,6 @@
 import React from 'react';
 import { Listing } from '../types/marketplace';
-import { Heart, MapPin, Calendar, Gauge, ShieldCheck, BedDouble, Building, Car } from 'lucide-react';
+import { Heart, MapPin, Calendar, Gauge, ShieldCheck, BedDouble, Building, Car, Home } from 'lucide-react';
 
 interface ListingCardProps {
     listing: Listing;
