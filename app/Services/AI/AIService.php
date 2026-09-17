@@ -475,6 +475,15 @@ Do NOT invent false records or claim access to unauthorized systems.";
         $role = $user ? $user->role : 'GUEST';
         $orgId = $user ? $user->organization_id : null;
 
+        // Enforce strict Safety & Assistance Mode (No independent destructive/mutating actions)
+        if (SystemKnowledgeBase::isDestructiveOrMutatingRequest($message)) {
+            return [
+                'success' => true,
+                'reply' => SystemKnowledgeBase::getSafeRefusalMessage(),
+                'role' => $role,
+            ];
+        }
+
         // Build comprehensive, unified system prompt with full platform knowledge
         $systemPrompt = SystemKnowledgeBase::buildFullSystemPrompt($user, $pageContext);
 

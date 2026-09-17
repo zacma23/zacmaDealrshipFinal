@@ -2,11 +2,19 @@
 
 namespace App\Services\AI;
 
+use App\Services\AI\Knowledge\CrmAndBuyerRequirementsKnowledge;
+use App\Services\AI\Knowledge\FaqAndTroubleshootingKnowledge;
+use App\Services\AI\Knowledge\IndustrySpecificationsKnowledge;
+use App\Services\AI\Knowledge\ListingLifecycleKnowledge;
+use App\Services\AI\Knowledge\PlatformKnowledge;
+use App\Services\AI\Knowledge\RolesAndPermissionsKnowledge;
+use App\Services\AI\Knowledge\SubscriptionsAndPaymentsKnowledge;
+
 class MockAIProvider implements AIProviderInterface
 {
     public function getProviderName(): string
     {
-        return 'mock';
+        return 'knowledge_engine';
     }
 
     public function generateText(string $prompt, array $options = []): array
@@ -14,6 +22,7 @@ class MockAIProvider implements AIProviderInterface
         $promptLower = strtolower($prompt);
         $text = '';
 
+        // Check for Vision/JSON detection request
         if (!empty($options['json_mode']) || str_contains($promptLower, 'detect listing') || str_contains($promptLower, 'analyze listing')) {
             if (str_contains($promptLower, 'house') || str_contains($promptLower, 'villa') || str_contains($promptLower, 'apartment') || str_contains($promptLower, 'property')) {
                 $payload = [
@@ -37,7 +46,7 @@ class MockAIProvider implements AIProviderInterface
             } elseif (str_contains($promptLower, 'phone') || str_contains($promptLower, 'laptop') || str_contains($promptLower, 'computer') || str_contains($promptLower, 'electronics')) {
                 $payload = [
                     'title' => 'Apple MacBook Pro 16" M3 Pro 36GB / 512GB Space Black',
-                    'category_slug' => 'electronics',
+                    'category_slug' => 'product',
                     'suggested_price' => 380000,
                     'currency' => 'ETB',
                     'price_type' => 'fixed',
@@ -56,7 +65,7 @@ class MockAIProvider implements AIProviderInterface
             } else {
                 $payload = [
                     'title' => '2023 Toyota RAV4 XLE Hybrid AWD',
-                    'category_slug' => 'vehicles',
+                    'category_slug' => 'vehicle',
                     'suggested_price' => 5400000,
                     'currency' => 'ETB',
                     'price_type' => 'fixed',
@@ -76,91 +85,124 @@ class MockAIProvider implements AIProviderInterface
                 ];
             }
             $text = json_encode($payload, JSON_PRETTY_PRINT);
-        } elseif (str_contains($promptLower, 'subscription') || str_contains($promptLower, 'plan') || str_contains($promptLower, 'pricing') || str_contains($promptLower, 'quota')) {
-            $text = "### Zacma Dealer Subscription Packages\n\n" .
-                    "The platform offers 3 tailored monthly subscription tiers for dealerships:\n\n" .
-                    "1. **Dealer Basic (5,000 ETB / month)**:\n" .
-                    "   - Up to 5 listing posts per day\n" .
-                    "   - Masked customer phone numbers (inquiries only to protect leads)\n" .
-                    "   - Standard AI lead scoring & descriptions\n" .
-                    "   - Up to 2 staff accounts\n\n" .
-                    "2. **Dealer Premium (8,000 ETB / month)**:\n" .
-                    "   - Up to 20 listing posts per day\n" .
-                    "   - Full direct customer phone & WhatsApp click-to-chat access\n" .
-                    "   - Storefront AI Customer Concierge chatbot\n" .
-                    "   - Gemini Multimodal Vision photo detection auto-fill\n" .
-                    "   - Up to 5 staff accounts\n\n" .
-                    "3. **Dealer Advance (12,000 ETB / month)**:\n" .
-                    "   - **Unlimited** listing posts per day\n" .
-                    "   - Direct CSV contact and lead export\n" .
-                    "   - **Dedicated Custom AI Concierge branded with your username (@username)**\n" .
-                    "   - 24/7 automated sales lead qualification bot\n" .
-                    "   - Unlimited team and sales agent seats\n" .
-                    "   - Top priority marketplace placement\n\n" .
-                    "You can upgrade your plan anytime at `/dealer/subscription` or directly via `/checkout/subscription/{plan_id}`.";
-        } elseif (str_contains($promptLower, 'payment') || str_contains($promptLower, 'telebirr') || str_contains($promptLower, 'crypto') || str_contains($promptLower, 'paypal') || str_contains($promptLower, 'chapa') || str_contains($promptLower, 'santimpay')) {
-            $text = "### Integrated Payment Gateways in Zacma\n\n" .
-                    "The platform supports both local Ethiopian mobile banking and global international payment rails:\n\n" .
-                    "- **Telebirr SuperApp**: Mobile money in ETB with instant server-to-server callback verification.\n" .
-                    "- **SantimPay Mobile**: Ethiopian QR payments and mobile banking direct transfer.\n" .
-                    "- **Chapa Pay**: Integrated banking checkout supporting CBE Birr, Awash Bank, Dashen Bank, and Amole.\n" .
-                    "- **PayPal Express**: Global payments via PayPal accounts and international cards in USD.\n" .
-                    "- **Stripe (Mastercard & Visa)**: Secure 256-bit encrypted card processing.\n" .
-                    "- **Crypto (USDT / BTC / ETH)**: Web3 & crypto payments supporting USDT (TRC-20), Bitcoin, and Ethereum with instant transaction verification.\n" .
-                    "- **Cash / Sandbox**: Showroom point-of-sale settlement or test simulation.\n\n" .
-                    "All verified payments automatically generate digital VAT invoices and update order statuses.";
-        } elseif (str_contains($promptLower, 'ai') && (str_contains($promptLower, 'vision') || str_contains($promptLower, 'listing') || str_contains($promptLower, 'create') || str_contains($promptLower, 'detect'))) {
-            $text = "### Gemini Multimodal AI Listing Creation\n\n" .
-                    "When adding a new listing at `/dealer/listings/create`, you can upload a product photo (vehicle, house, laptop, machinery, or watch). The AI will:\n\n" .
-                    "1. **Identify the Item**: Automatically extract model, brand, year, and condition.\n" .
-                    "2. **Category Mapping**: Match the item to its specific category (e.g. Vehicles, Real Estate, Electronics).\n" .
-                    "3. **Fair Market Pricing**: Estimate realistic market value in ETB.\n" .
-                    "4. **Sales Pitch**: Generate a professional 3-paragraph marketing description.\n" .
-                    "5. **Dynamic Field Auto-Fill**: Populate category-specific custom attributes (mileage, transmission, bedrooms, RAM, etc.).";
-        } elseif (str_contains($promptLower, 'category') || str_contains($promptLower, 'categories') || str_contains($promptLower, 'system') || str_contains($promptLower, 'project') || str_contains($promptLower, 'platform') || str_contains($promptLower, 'what is zacma')) {
-            $text = "### About Zacma AI Platform\n\n" .
-                    "**Zacma AI Platform** is an enterprise multi-tenant Marketplace + CRM SaaS engineered with Laravel 12, Eloquent ORM, Alpine.js, and Tailwind CSS.\n\n" .
-                    "- **Universal Categories**: Not limited to cars! Fully supports Vehicles, Real Estate, Electronics, Furniture, Machinery, Agricultural Equipment, Jobs, Services, and Custom Categories.\n" .
-                    "- **Multi-Tenancy**: Built with strict `TenantScope` isolation. Dealership data is strictly private and isolated.\n" .
-                    "- **Integrated CRM**: Complete Customer 360 view, visual Kanban sales pipeline, algorithmic lead scoring (Hot, Warm, Cold), and calendar scheduling.\n" .
-                    "- **Portals**: Dedicated spaces for Super Admin (`/super-admin`), Dealership Staff (`/dealer`), Buyers (`/customer`), and Profile Settings (`/profile`).\n" .
-                    "- **AI Ecosystem**: Powered by Google Gemini for Multimodal Vision auto-detection, lead scoring, and role-aware assistant chat.";
-        } elseif (str_contains($promptLower, 'profile') || str_contains($promptLower, 'avatar') || str_contains($promptLower, 'password')) {
-            $text = "### User Profile & Security Settings\n\n" .
-                    "You can manage your account anytime at `/profile`:\n\n" .
-                    "- **Profile Picture**: Upload or change your custom photo (JPG, PNG, WebP up to 5MB) with instant client-side preview, or revert to default initials.\n" .
-                    "- **Contact Information**: Update your Full Name, Email, and Phone number.\n" .
-                    "- **Security**: Change your account password with current password verification.\n" .
-                    "- **Account Overview**: Check your active role, dealership affiliation, and last login timestamp.";
-        } elseif (str_contains($promptLower, 'crm') || str_contains($promptLower, 'pipeline') || str_contains($promptLower, 'kanban')) {
-            $text = "### Zacma CRM Suite\n\n" .
-                    "- **Visual Kanban Pipeline** (`/dealer/crm/pipeline`): Drag and drop deals across stages (New Lead, Contacted, Qualified, Proposal/Viewing, Negotiation, Closed Won, Closed Lost).\n" .
-                    "- **Customer 360** (`/dealer/crm/contacts/{id}`): Deep view of contact timeline, inquiry history, notes, tasks, and orders.\n" .
-                    "- **Automated Lead Scoring**: Ranks leads as HOT (red badge), WARM (yellow badge), or COLD (slate badge) based on interaction recency and activity.\n" .
-                    "- **Follow-up Tasks & Calendar**: Prioritized task list (Overdue, Today, Upcoming) and scheduled test drive / viewing appointments.";
-        } elseif (str_contains($promptLower, 'role: super_admin') || str_contains($promptLower, 'super admin')) {
-            $text = "Zacma SaaS Director AI: System is operating normally across all organizations. We currently monitor multi-tenant activity, active subscription tiers, and marketplace payment volumes. You can configure dynamic categories, adjust subscription quotas, or audit security logs at any time from your control panel.";
-        } elseif (str_contains($promptLower, 'role: customer') || str_contains($promptLower, 'buyer')) {
-            $text = "Welcome to Zacma Concierge! I'm here to assist your shopping experience. You can search certified vehicles, luxury real estate, and high-grade electronics. If you find an item you like, you can directly book an inspection appointment or place a secure reservation deposit via Telebirr, SantimPay, or Chapa.";
-        } elseif (str_contains($promptLower, 'hot lead') || str_contains($promptLower, 'score')) {
-            $text = "Based on our interaction analysis: Customer exhibits high purchase intent with 4 recent vehicle inquiries, requested an in-person viewing, and responded within 2 hours. Recommended Action: Schedule immediate call and send quotation.";
-        } elseif (str_contains($promptLower, 'summary') || str_contains($promptLower, 'summarize')) {
-            $text = "Customer Summary: The client has active interest in listings, has viewed 6 properties/vehicles, scheduled 1 appointment, and has an ongoing negotiation deal. No follow-up in the last 48 hours.";
-        } elseif (str_contains($promptLower, 'sms') || str_contains($promptLower, 'draft sms')) {
-            $text = "Hello! Thank you for your interest in our listings at Zacma. We have prepared the details you requested. Would tomorrow 10:00 AM work for a quick viewing/call? Best regards, Sales Team.";
-        } elseif (str_contains($promptLower, 'email') || str_contains($promptLower, 'draft email')) {
-            $text = "Dear Customer,\n\nThank you for reaching out to us. We have updated our latest pricing and options tailored to your preferences. Please let us know when you would like to arrange an appointment or review financing options.\n\nWarm regards,\nZacma Dealership Team";
-        } elseif (str_contains($promptLower, 'listing') || str_contains($promptLower, 'description')) {
-            $text = "Exceptional opportunity! Pristine condition, meticulously maintained with full service history. Features modern specifications, premium comfort, and superior performance. Schedule your inspection today.";
-        } else {
-            $text = "Zacma AI Assistant: Ready to assist with your CRM, inventory management, customer inquiries, and sales pipeline operations. How can I help optimize your workflow today?";
+
+            return [
+                'success' => true,
+                'text' => $text,
+                'tokens' => (int)(strlen($prompt . $text) / 4),
+                'raw' => ['mode' => 'vision_detection_mock'],
+            ];
+        }
+
+        // Safety Guardrail: Check for destructive action requests
+        if (SystemKnowledgeBase::isDestructiveOrMutatingRequest($promptLower)) {
+            $text = SystemKnowledgeBase::getSafeRefusalMessage();
+        } 
+        // 1. One Account Rule & Roles
+        elseif (str_contains($promptLower, 'separate') || str_contains($promptLower, 'seller account') || str_contains($promptLower, 'can i sell') || str_contains($promptLower, 'one account') || str_contains($promptLower, 'buyer and seller')) {
+            $text = "### The Zacma Universal User Model: One Account = Buyer + Seller\n\n" .
+                    "**Yes, absolutely!** You **never** need a separate vendor or seller account to sell items on Zacma.\n\n" .
+                    "- **Single Account Power**: Every registered account can browse, favorite, inquire on listings, and publish their own listings.\n" .
+                    "- **Instant Listing**: Simply click the green **'+ Add Listing'** button in the top navigation bar at any time to post a vehicle, property, apartment, or product.\n" .
+                    "- **Inbound Leads**: When buyers inquire on your listings, their contacts and messages are automatically routed directly to your **'CRM Leads'** tab.\n" .
+                    "- **Account Tiers**: In your profile settings, you can declare your profile as an **Individual**, **Business**, or **Dealership** (adding trade license and TIN numbers for verified status).";
+        }
+        // 2. Listing Lifecycle & Moderation (Check before general words)
+        elseif (str_contains($promptLower, 'pending') || str_contains($promptLower, 'reject') || str_contains($promptLower, 'approval') || str_contains($promptLower, 'approve') || str_contains($promptLower, 'lifecycle') || str_contains($promptLower, 'moderation')) {
+            $text = "### Listing Lifecycle & Moderation Workflow\n\n" .
+                    "Every listing on Zacma progresses through a clear lifecycle to guarantee safety and prevent fraudulent posts:\n\n" .
+                    "```text\n" .
+                    "Create Listing -> Status: 'pending' -> Admin Review -> 'published' -> Buyer Inquiries -> CRM Leads -> Sold\n" .
+                    "```\n\n" .
+                    "- **Why is my listing pending?**: Newly created listings are reviewed by the moderation team to verify accurate specs and fair pricing in ETB. Review typically takes a few hours.\n" .
+                    "- **What if my listing is rejected?**: When a listing is rejected, the Super Admin provides a specific `rejection_reason`. You can view this feedback in **'My Listings'**, click **'Edit'**, resolve the issue, and resubmit.\n" .
+                    "- **Published Status**: Once approved, your listing becomes immediately visible in public search and category filters.";
+        }
+        // 3. Subscriptions & Listing Quotas
+        elseif (preg_match('/\b(quota|quotas|subscription|subscriptions|pricing|limit|limits|upgrade|basic|premium|pro|plans?)\b/i', $promptLower)) {
+            $text = "### Zacma Subscription Plans & Listing Quotas\n\n" .
+                    "Zacma provides three tiered subscription plans designed for individual sellers and commercial dealerships:\n\n" .
+                    "1. **Basic Plan (Free / 0 ETB)**:\n" .
+                    "   - **Quota**: Up to **20 active listings**.\n" .
+                    "   - **Features**: Standard marketplace search, inbound CRM leads inbox, direct in-app messaging.\n\n" .
+                    "2. **Premium Plan (499 ETB / month)**:\n" .
+                    "   - **Quarterly**: 1,299 ETB (10% discount).\n" .
+                    "   - **Yearly**: 4,499 ETB (2+ months free).\n" .
+                    "   - **Quota**: Up to **50 active listings**.\n" .
+                    "   - **Features**: Priority search placement, verified badge eligibility, priority lead routing.\n\n" .
+                    "3. **Pro Plan (1,499 ETB / month)**:\n" .
+                    "   - **Quarterly**: 3,999 ETB (10% discount).\n" .
+                    "   - **Yearly**: 13,499 ETB (2+ months free).\n" .
+                    "   - **Quota**: Up to **100 active listings**.\n" .
+                    "   - **Features**: Featured badge on homepage, instant moderation priority, complete CRM lead pipeline, dedicated account manager.\n\n" .
+                    "**Hard Limit Enforcement**: If you reach your plan quota limit, new listing creation is safely held until you upgrade your plan under the **'Plans & Pricing'** tab.";
+        }
+        // 4. Payment Gateways (Ethiopia)
+        elseif (str_contains($promptLower, 'payment') || str_contains($promptLower, 'chapa') || str_contains($promptLower, 'telebirr') || str_contains($promptLower, 'cbe') || str_contains($promptLower, 'ebirr') || str_contains($promptLower, 'santim') || str_contains($promptLower, 'gateway')) {
+            $text = "### Supported Ethiopian Payment Gateways (ETB)\n\n" .
+                    "Zacma natively integrates 5 trusted domestic Ethiopian payment options for instant digital subscription activation:\n\n" .
+                    "1. **Chapa**: Seamless checkout supporting local Ethiopian debit cards, CBE, Awash, Dashen, and Amole.\n" .
+                    "2. **Telebirr**: Direct mobile money payment through Ethio Telecom's SuperApp.\n" .
+                    "3. **CBE Birr**: Commercial Bank of Ethiopia mobile money integration.\n" .
+                    "4. **eBirr**: Convenient mobile wallet payment rail.\n" .
+                    "5. **SantimPay**: Fast mobile banking and QR checkout in ETB.\n\n" .
+                    "**Security**: All gateway transactions use digital HMAC webhook signatures and replay-proof idempotency checks to ensure payment integrity.";
+        }
+        // 5. CRM & Buyer Requirements
+        elseif (str_contains($promptLower, 'crm') || str_contains($promptLower, 'lead') || str_contains($promptLower, 'pipeline') || str_contains($promptLower, 'buyer need') || str_contains($promptLower, 'requirement')) {
+            $text = "### CRM Leads Pipeline & Buyer Requirements Hub\n\n" .
+                    "Zacma bridges the gap between buyers and sellers with built-in CRM tools:\n\n" .
+                    "1. **Inbound CRM Pipeline ('CRM Leads' Tab)**:\n" .
+                    "   - Whenever a customer clicks 'Contact Seller', a new lead is instantly created in your pipeline.\n" .
+                    "   - Move leads through 3 stages: **New** -> **Contacted** -> **Closed**.\n" .
+                    "   - Schedule follow-up dates and record private internal notes.\n\n" .
+                    "2. **Buyer Needs Board ('Buyer Needs' Tab)**:\n" .
+                    "   - If a buyer cannot find what they want, they can post a public requirement with their target ETB budget.\n" .
+                    "   - Verified dealers and sellers can browse these requests and click **'Connect'** to message the buyer directly with matching inventory.";
+        }
+        // 6. Vehicles
+        elseif (str_contains($promptLower, 'car') || str_contains($promptLower, 'vehicle') || str_contains($promptLower, 'find a car') || str_contains($promptLower, 'toyota') || str_contains($promptLower, 'hyundai')) {
+            $text = "### Searching and Listing Vehicles on Zacma\n\n" .
+                    "- **How to Find Vehicles**: Open the **'Browse Market'** tab and select **'Vehicles'**. Filter by city (Addis Ababa, Hawassa, Adama, etc.), price range in ETB, year, fuel type (Petrol, Diesel, Hybrid, Electric), or transmission.\n" .
+                    "- **Vehicle Specifications Supported**: Brand, Model, Year, Mileage (km), Transmission, Fuel Type, Body Type, Condition (Brand New, Foreign Used, Clean Local Used), and Color.\n" .
+                    "- **How to Post a Car**: Click **'+ Add Listing'**, select **Vehicle**, fill in specs, upload photos, and click Submit for Approval.";
+        }
+        // 7. Real Estate & Apartments
+        elseif (str_contains($promptLower, 'apartment') || str_contains($promptLower, 'real estate') || str_contains($promptLower, 'villa') || str_contains($promptLower, 'house') || str_contains($promptLower, 'property') || str_contains($promptLower, 'land')) {
+            $text = "### Real Estate & Apartments on Zacma\n\n" .
+                    "- **Real Estate**: Includes residential villas, family houses, commercial buildings, offices, and plots of land for sale or lease.\n" .
+                    "  - *Attributes*: Bedrooms, Bathrooms, Area in square meters (sqm), Parking slots, Garden, Backup generator, Water reservoir.\n" .
+                    "- **Apartments & Condominiums**: Dedicated focus on urban apartments in Addis Ababa and major cities.\n" .
+                    "  - *Attributes*: Floor number, Furnished status (Furnished / Unfurnished), Rent period (Monthly rent in ETB), Elevator access, 24/7 Security, Standby generator.\n" .
+                    "- **Searching**: Use the **'Real Estate'** and **'Apartments'** filter tabs in **Browse Market** to filter by bedrooms and city location.";
+        }
+        // 8. General Products & Parts
+        elseif (str_contains($promptLower, 'product') || str_contains($promptLower, 'part') || str_contains($promptLower, 'electronics') || str_contains($promptLower, 'furniture') || str_contains($promptLower, 'machinery')) {
+            $text = "### General Marketplace Products & Spare Parts\n\n" .
+                    "Zacma features an extensible product catalog supporting:\n" .
+                    "- **Automotive Spare Parts**: Brake pads, filters, engine components, body parts with OEM part numbers and warranty details.\n" .
+                    "- **Electronics & Computers**: Smartphones, laptops, commercial equipment.\n" .
+                    "- **Machinery & Furniture**: Heavy machinery, office equipment, home furnishings.\n\n" .
+                    "Select the **'Products'** tab in Browse Market to discover or post items with custom brand and warranty specifications.";
+        }
+        // Default: Platform Overview & Quick Navigation
+        else {
+            $text = "### Welcome to Zacma AI Assistant!\n\n" .
+                    "I am your knowledge copilot for the **Zacma Dealership & Marketplace SaaS**.\n\n" .
+                    "Here are key things I can help you with:\n" .
+                    "- **Selling on Zacma**: Learn how any user can post listings directly (**One Account = Buyer + Seller**).\n" .
+                    "- **Subscriptions & Quotas**: Understand the Basic (20), Premium (50), and Pro (100) plans and limits.\n" .
+                    "- **Ethiopian Payments**: Guidance on Chapa, Telebirr, CBE Birr, eBirr, and SantimPay.\n" .
+                    "- **CRM & Inquiries**: How customer inquiries automatically become inbound seller leads.\n" .
+                    "- **Buyer Needs Board**: How to post what you are looking for with target ETB budgets.\n\n" .
+                    "Feel free to ask any specific question, or click one of the suggested prompts below!";
         }
 
         return [
             'success' => true,
             'text' => $text,
             'tokens' => (int)(strlen($prompt . $text) / 4),
-            'raw' => ['mode' => 'intelligent_mock'],
+            'raw' => ['mode' => 'knowledge_engine'],
         ];
     }
 }

@@ -2,147 +2,130 @@
 
 namespace App\Services\AI;
 
-use App\Models\Category;
-use App\Models\SubscriptionPlan;
 use App\Models\User;
+use App\Services\AI\Knowledge\CrmAndBuyerRequirementsKnowledge;
+use App\Services\AI\Knowledge\FaqAndTroubleshootingKnowledge;
+use App\Services\AI\Knowledge\IndustrySpecificationsKnowledge;
+use App\Services\AI\Knowledge\ListingLifecycleKnowledge;
+use App\Services\AI\Knowledge\PlatformKnowledge;
+use App\Services\AI\Knowledge\RolesAndPermissionsKnowledge;
+use App\Services\AI\Knowledge\SubscriptionsAndPaymentsKnowledge;
 
 class SystemKnowledgeBase
 {
     /**
-     * Get platform overview and architecture summary.
+     * Check if a user request attempts to mutate or perform destructive platform actions.
      */
-    public static function getPlatformOverview(): string
+    public static function isDestructiveOrMutatingRequest(string $query): bool
     {
-        return <<<TEXT
-PLATFORM OVERVIEW:
-- Project Name: Zacma AI Platform (Zacma Marketplace + CRM SaaS)
-- Architecture: Commercial multi-tenant SaaS built with Laravel 12, Eloquent ORM, Blade, Alpine.js, and Tailwind CSS.
-- Multi-Tenancy Isolation: Strict organization-level scoping enforced by TenantScope. Every dealership/business tenant has isolated listings, contacts, leads, deals, appointments, and staff accounts.
-- Universal Scope: The platform is not limited to vehicles. It supports Vehicles, Real Estate (Villas, Apartments, Land), Electronics (Smartphones, Laptops, Gadgets), Furniture, Machinery, Agricultural Equipment, Jobs, Services, and Custom Categories.
-TEXT;
+        $q = strtolower($query);
+        $dangerPatterns = [
+            'delete listing', 'remove listing', 'drop database', 'delete account', 
+            'change price', 'update balance', 'grant admin', 'override approval', 
+            'approve my listing', 'ban user', 'refund without approval', 'delete table'
+        ];
+
+        foreach ($dangerPatterns as $pattern) {
+            if (str_contains($q, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
-     * Get subscription tiers and quota details.
+     * Get safe refusal response for mutating/destructive requests.
      */
-    public static function getSubscriptionPlansKnowledge(): string
+    public static function getSafeRefusalMessage(): string
     {
-        return <<<TEXT
-DEALER SUBSCRIPTION PLANS & PACKAGES:
-1. Dealer Basic (5,000 ETB / month):
-   - Daily Post Limit: 5 items per day.
-   - Customer Contact: Masked customer phone numbers (inquiries only; prevents lead poaching).
-   - AI Features: Standard AI lead scoring & listing descriptions.
-   - Staff Accounts: Up to 2 staff/agent logins.
-2. Dealer Premium (8,000 ETB / month):
-   - Daily Post Limit: 20 items per day.
-   - Customer Contact: Full direct customer phone number + Click-to-WhatsApp access.
-   - AI Features: Storefront AI Customer Concierge chatbot + Gemini Multimodal Vision photo detection.
-   - Staff Accounts: Up to 5 staff/agent logins.
-3. Dealer Advance (12,000 ETB / month) [Enterprise Flagship]:
-   - Daily Post Limit: UNLIMITED item posts per day.
-   - Customer Contact: Unrestricted customer phone access + 1-click Direct CSV Contact Export.
-   - AI Features: Dedicated custom AI sales assistant branded with dealer's username (@dealerUsername AI Concierge), 24/7 AI lead qualification bot.
-   - Staff Accounts: Unlimited team & sales agent seats.
-   - Marketplace Placement: Top priority featured placement on homepage and search results.
-- Self-Service Checkout: Available at /checkout/subscription/{plan_id} with instant automated digital activation and VAT invoice generation.
-TEXT;
+        return "I operate strictly in **Knowledge and Assistance Mode** to guide, explain, and answer questions about the Zacma platform.\n\n" .
+               "I do not have authorization to directly modify system data, delete records, or alter listing statuses. " .
+               "If you need to edit or delete your own listings, please navigate to the **'My Listings'** tab. " .
+               "For administrative or account actions, please contact the moderation team or use the **Admin Command Center**.";
     }
 
     /**
-     * Get payment gateway integrations knowledge.
+     * Find the most relevant structured knowledge based on a user's query keywords.
      */
-    public static function getPaymentGatewaysKnowledge(): string
+    public static function findRelevantKnowledge(string $query): string
     {
-        return <<<TEXT
-INTEGRATED PAYMENT GATEWAYS:
-1. Telebirr SuperApp: Ethio Telecom mobile money in ETB with instant server-to-server callback verification.
-2. SantimPay Mobile: Ethiopian mobile banking, QR code checkout, and direct debit in ETB.
-3. Chapa Pay: Integrated Ethiopian bank checkout supporting CBE Birr, Awash Bank, Dashen Bank, and Amole.
-4. PayPal Express: Global payments via PayPal account balance and international cards in USD.
-5. Stripe / Mastercard & Visa: International credit/debit card processing with 256-bit encryption.
-6. Crypto (USDT / BTC / ETH): Web3 & crypto payments supporting USDT (TRC-20), Bitcoin, and Ethereum with instant transaction hash matching.
-7. Sandbox / Cash: In-person showroom settlement or instant testing activation.
-TEXT;
+        $q = strtolower($query);
+
+        // 1. Check for destructive action
+        if (self::isDestructiveOrMutatingRequest($q)) {
+            return self::getSafeRefusalMessage();
+        }
+
+        // 2. Query matching for high-signal topics
+        if (str_contains($q, 'separate') || str_contains($q, 'seller account') || str_contains($q, 'can i sell') || str_contains($q, 'one account') || str_contains($q, 'buyer and seller')) {
+            return RolesAndPermissionsKnowledge::getKnowledge() . "\n\n" . FaqAndTroubleshootingKnowledge::getKnowledge();
+        }
+
+        if (str_contains($q, 'quota') || str_contains($q, 'limit') || str_contains($q, 'plan') || str_contains($q, 'subscription') || str_contains($q, 'pricing') || str_contains($q, 'upgrade') || str_contains($q, 'basic') || str_contains($q, 'premium') || str_contains($q, 'pro')) {
+            return SubscriptionsAndPaymentsKnowledge::getKnowledge();
+        }
+
+        if (str_contains($q, 'pay') || str_contains($q, 'chapa') || str_contains($q, 'telebirr') || str_contains($q, 'cbe') || str_contains($q, 'ebirr') || str_contains($q, 'santim') || str_contains($q, 'etb')) {
+            return SubscriptionsAndPaymentsKnowledge::getKnowledge();
+        }
+
+        if (str_contains($q, 'car') || str_contains($q, 'vehicle') || str_contains($q, 'mileage') || str_contains($q, 'transmission') || str_contains($q, 'fuel')) {
+            return IndustrySpecificationsKnowledge::getKnowledge();
+        }
+
+        if (str_contains($q, 'apartment') || str_contains($q, 'real estate') || str_contains($q, 'villa') || str_contains($q, 'house') || str_contains($q, 'bedroom') || str_contains($q, 'land') || str_contains($q, 'rent')) {
+            return IndustrySpecificationsKnowledge::getKnowledge();
+        }
+
+        if (str_contains($q, 'pending') || str_contains($q, 'reject') || str_contains($q, 'approve') || str_contains($q, 'lifecycle') || str_contains($q, 'moderation')) {
+            return ListingLifecycleKnowledge::getKnowledge();
+        }
+
+        if (str_contains($q, 'crm') || str_contains($q, 'lead') || str_contains($q, 'requirement') || str_contains($q, 'message') || str_contains($q, 'inquiry') || str_contains($q, 'chat') || str_contains($q, 'contact seller')) {
+            return CrmAndBuyerRequirementsKnowledge::getKnowledge();
+        }
+
+        // Return combined FAQ & Platform overview for general queries
+        return FaqAndTroubleshootingKnowledge::getKnowledge() . "\n\n" . PlatformKnowledge::getKnowledge();
     }
 
     /**
-     * Get user roles and portals breakdown.
-     */
-    public static function getRoleAndPortalKnowledge(): string
-    {
-        return <<<TEXT
-USER ROLES & DEDICATED PORTALS:
-1. SUPER_ADMIN (/super-admin):
-   - Global dashboard monitoring all tenant dealerships, MRR, platform revenue, and active subscriptions.
-   - Dynamic Categories & Attribute Schema Builder: Add/edit categories and custom typed fields (text, number, select, boolean, date) without touching code.
-   - Tenant Management: Provision, toggle, or audit dealerships.
-   - System Audit Logs & Global Settings.
-2. DEALER STAFF (ORGANIZATION_ADMIN, MANAGER, SALES_AGENT, STAFF) (/dealer):
-   - Inventory & Listing Management with AI Vision auto-fill.
-   - Visual Kanban Deals Pipeline (New Lead, Contacted, Qualified, Proposal/Viewing, Negotiation, Closed Won, Closed Lost).
-   - Customer 360 Contact profiles with complete interaction timelines, internal notes, tasks, and appointments.
-   - Automated Lead Scoring (HOT, WARM, COLD) based on interaction recency, inquiry count, and deal stage.
-   - Subscription & Quotas management (/dealer/subscription).
-3. CUSTOMER / BUYER (/customer):
-   - Public marketplace browsing, vehicle inspection & test drive bookings, property viewing requests, order tracking, and deposit reservations.
-4. USER PROFILE SETTINGS (/profile):
-   - Accessible to all users for custom avatar picture upload/preview (JPG, PNG, WebP up to 5MB), name, email, phone editing, and password updates.
-TEXT;
-    }
-
-    /**
-     * Get AI engine & multimodal features knowledge.
-     */
-    public static function getAiCapabilitiesKnowledge(): string
-    {
-        return <<<TEXT
-AI CAPABILITIES & FEATURES:
-1. Gemini Multimodal Vision Listing Auto-Detection (/dealer/listings/create):
-   - Upload any product photo (car, house, laptop, machinery, watch, furniture).
-   - AI automatically detects title, selects category, estimates market price in ETB, writes a compelling 3-paragraph sales description, and extracts key features into category custom fields.
-2. Algorithmic & Assistive AI Lead Scoring:
-   - Automatically scores leads as HOT (80-100), WARM (50-79), or COLD (0-49) based on activity velocity, response times, and inquiry status.
-3. Role-Aware AI Assistant Chat Widget:
-   - Interactive floating assistant available on all pages that tailors its context and advice to the logged-in user's role (Super Admin, Dealer Staff, Customer, or Guest).
-   - On Dealer Advance tier, dynamically branded as "@dealerUsername AI Customer Assistant".
-TEXT;
-    }
-
-    /**
-     * Build the complete unified system prompt containing all system knowledge.
+     * Build the complete comprehensive system prompt for LLM providers (e.g. Gemini).
      */
     public static function buildFullSystemPrompt(?User $user = null, array $pageContext = []): string
     {
         $role = $user ? $user->role : 'GUEST';
-        $org = $user?->organization;
-        $dealerHandle = $org ? ($org->subdomain ?: $org->slug) : 'dealer';
-        $orgName = $org ? $org->name : 'Zacma Marketplace';
-        $isBranded = $org && $org->hasUsernameBrandedAi();
+        $userName = $user ? $user->name : 'Guest Visitor';
+        $userLimit = $user ? $user->getListingLimit() : 20;
+        $userUsed = $user ? $user->getActiveListingCount() : 0;
+        $activeTab = $pageContext['active_tab'] ?? $pageContext['page_context'] ?? 'marketplace';
 
-        $prompt = "You are Zacma AI Platform Assistant, the intelligent copilot for the Zacma Marketplace + CRM SaaS platform.\n";
+        $prompt = <<<TEXT
+You are Zacma AI Knowledge Assistant, the official system-wide AI copilot for the Zacma Dealership & Multi-Industry Marketplace + CRM SaaS platform in Ethiopia.
 
-        if ($isBranded) {
-            $prompt .= "BRANDING: You are currently acting as @{$dealerHandle} AI Customer Assistant for {$orgName} (Dealer Advance Tier).\n";
-        }
+### ACTIVE USER CONTEXT:
+- **User Name**: {$userName}
+- **Role**: {$role}
+- **Listing Quota Status**: {$userUsed} / {$userLimit} listings used
+- **Current Active View / Page**: {$activeTab}
 
-        $prompt .= "CURRENT USER CONTEXT:\n";
-        $prompt .= "- User: " . ($user ? $user->name : 'Guest Visitor') . "\n";
-        $prompt .= "- Role: {$role}\n";
-        $prompt .= "- Organization / Business: {$orgName}\n\n";
+### STRICT SAFETY & ASSISTANCE INSTRUCTIONS:
+1. **Knowledge & Assistance Mode Only**: You guide, explain, search, troubleshoot, and educate users on how to use Zacma. You NEVER claim to execute database deletes, status modifications, or fund adjustments yourself.
+2. **One Account Model**: Always remember and clarify that every authenticated user can both BUY and SELL from their single account without registering a separate vendor account.
+3. **Currency & Localization**: All prices and budgets are in Ethiopian Birr (ETB). Payment gateways are Ethiopian (Chapa, Telebirr, CBE Birr, eBirr, SantimPay).
+4. **Tone & Style**: Helpful, professional, concise, structured with GitHub-style markdown, bold headings, and bullet points.
 
-        $prompt .= "SYSTEM KNOWLEDGE BASE:\n";
-        $prompt .= self::getPlatformOverview() . "\n\n";
-        $prompt .= self::getSubscriptionPlansKnowledge() . "\n\n";
-        $prompt .= self::getPaymentGatewaysKnowledge() . "\n\n";
-        $prompt .= self::getRoleAndPortalKnowledge() . "\n\n";
-        $prompt .= self::getAiCapabilitiesKnowledge() . "\n\n";
+### COMPLETE SYSTEM KNOWLEDGE REPOSITORY:
+TEXT;
 
-        $prompt .= "BEHAVIOR GUIDELINES:\n";
-        $prompt .= "- Answer questions about Zacma features, subscription tiers, payment gateways, CRM tools, or categories clearly and accurately.\n";
-        $prompt .= "- Provide specific links and paths when guiding users (e.g. /dealer/listings/create, /dealer/subscription, /checkout/subscription/{id}, /profile, /pricing).\n";
-        $prompt .= "- Format responses with clean GitHub-flavored markdown, bullet points, and bold text for easy reading.\n";
-        $prompt .= "- Maintain tenant security: Never disclose another organization's private leads or sales data.\n";
+        $prompt .= "\n\n" . PlatformKnowledge::getKnowledge();
+        $prompt .= "\n\n" . RolesAndPermissionsKnowledge::getKnowledge();
+        $prompt .= "\n\n" . ListingLifecycleKnowledge::getKnowledge();
+        $prompt .= "\n\n" . IndustrySpecificationsKnowledge::getKnowledge();
+        $prompt .= "\n\n" . CrmAndBuyerRequirementsKnowledge::getKnowledge();
+        $prompt .= "\n\n" . SubscriptionsAndPaymentsKnowledge::getKnowledge();
+        $prompt .= "\n\n" . FaqAndTroubleshootingKnowledge::getKnowledge();
 
         return $prompt;
     }

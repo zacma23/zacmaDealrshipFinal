@@ -287,5 +287,27 @@ export const api = {
         const res = await apiClient.post('/admin/gateway-settings', data);
         return res.data;
     },
+
+    // System-Wide Knowledge-Based AI Assistant
+    async chatWithAi(message: string, activeTab?: string, pageContext?: string) {
+        const res = await apiClient.post('/ai/chat', {
+            message,
+            active_tab: activeTab,
+            page_context: pageContext,
+        });
+        return res.data;
+    },
+
+    async getAiHistory(activeTab?: string) {
+        const res = await apiClient.get('/ai/history', {
+            params: { active_tab: activeTab }
+        });
+        return res.data;
+    },
+
+    async clearAiHistory() {
+        const res = await apiClient.post('/ai/clear');
+        return res.data;
+    },
 };
 

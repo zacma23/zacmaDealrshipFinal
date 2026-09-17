@@ -15,6 +15,7 @@ import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
 import { MessagesView } from './components/MessagesView';
 import { BuyerRequirementsView } from './components/BuyerRequirementsView';
+import { AiAssistantWidget } from './components/AiAssistantWidget';
 
 declare global {
     interface Window {
@@ -230,6 +231,15 @@ export const App: React.FC = () => {
                     }}
                 />
             )}
+
+            {/* System-Wide Knowledge-Based AI Assistant */}
+            <AiAssistantWidget
+                user={user}
+                activeTab={activeTab}
+                onNavigateTab={(tab) => {
+                    setActiveTab(tab);
+                }}
+            />
 
             {/* Footer */}
             <footer className="bg-white border-t border-slate-200/80 py-8 mt-auto text-xs text-slate-500">

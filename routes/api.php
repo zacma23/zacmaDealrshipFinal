@@ -61,6 +61,13 @@ $registerMarketplaceApiRoutes = function () {
     // Buyer Requirements Board (Public index)
     Route::get('/buyer-requirements', [BuyerRequirementController::class, 'index']);
 
+    // System-Wide Knowledge-Based AI Assistant
+    Route::prefix('ai')->group(function () {
+        Route::post('/chat', [\App\Http\Controllers\AiChatController::class, 'chat']);
+        Route::get('/history', [\App\Http\Controllers\AiChatController::class, 'history']);
+        Route::post('/clear', [\App\Http\Controllers\AiChatController::class, 'clear']);
+    });
+
     // ==========================================
     // AUTHENTICATED USER ROUTES
     // ==========================================
