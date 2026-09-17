@@ -16,7 +16,7 @@ use App\Http\Controllers\Api\SubscriptionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/health', function () {
+$healthHandler = function () {
     return response()->json([
         'status' => 'healthy',
         'platform' => 'Zacma Dealership & Marketplace + CRM SaaS (Ethiopia)',
@@ -24,7 +24,9 @@ Route::get('/health', function () {
         'api_versions' => ['v1'],
         'timestamp' => now()->toIso8601String(),
     ]);
-});
+};
+Route::get('/health', $healthHandler);
+Route::get('/v1/health', $healthHandler);
 
 // Closure to register all core Dealership & Marketplace routes (v1 and root api)
 $registerMarketplaceApiRoutes = function () {
