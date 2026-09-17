@@ -1,0 +1,12 @@
+# ============================================================
+# ZACMA SAAS CPANEL CRON CONFIGURATION
+# ============================================================
+#
+# Replace /home/username/public_html/zacma with your actual cPanel path.
+# Replace /usr/local/bin/php with your cPanel PHP CLI path (PHP 8.2 or 8.3).
+#
+# 1. Laravel Task Scheduler (Runs every minute)
+* * * * * /usr/local/bin/php /home/username/public_html/zacma/artisan schedule:run >> /dev/null 2>&1
+
+# 2. Laravel Database Queue Worker (Processes background tasks every 5 minutes if no supervisor)
+*/5 * * * * /usr/local/bin/php /home/username/public_html/zacma/artisan queue:work database --stop-when-empty --tries=3 >> /dev/null 2>&1
