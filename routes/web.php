@@ -14,7 +14,10 @@ use Illuminate\Support\Facades\Route;
 // PUBLIC SMM MARKETPLACE & INFO
 // ==========================================
 
-Route::get('/', [MarketplaceController::class, 'index'])->name('home');
+Route::get('/', function () {
+    return view('app');
+})->name('home');
+Route::get('/smm-portal', [MarketplaceController::class, 'index'])->name('smm.portal');
 Route::get('/services', [SmmCustomerPortalController::class, 'services'])->name('services.public');
 Route::get('/api-docs', [SmmResellerPortalController::class, 'apiDocs'])->name('api-docs.public');
 

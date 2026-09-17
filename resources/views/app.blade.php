@@ -1,3 +1,21 @@
+@php
+    $initialUser = auth()->check() ? [
+        'id' => auth()->id(),
+        'name' => auth()->user()->name,
+        'username' => auth()->user()->username,
+        'email' => auth()->user()->email,
+        'role' => auth()->user()->role,
+        'is_super_admin' => auth()->user()->isSuperAdmin(),
+        'avatar' => auth()->user()->getAvatarUrl(),
+        'quota' => [
+            'limit' => auth()->user()->getListingLimit(),
+            'used' => auth()->user()->getActiveListingCount(),
+            'remaining' => max(0, auth()->user()->getListingLimit() - auth()->user()->getActiveListingCount()),
+            'can_create' => auth()->user()->canCreateListing(),
+            'plan_name' => auth()->user()->activeSubscription?->plan?->name ?? 'Basic',
+        ]
+    ] : null;
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,22 +28,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
         window.__APP_NAME__ = "{{ config('app.name', 'Zacma Marketplace') }}";
-        window.__INITIAL_USER__ = @json(auth()->check() ? [
-            'id' => auth()->id(),
-            'name' => auth()->user()->name,
-            'username' => auth()->user()->username,
-            'email' => auth()->user()->email,
-            'role' => auth()->user()->role,
-            'is_super_admin' => auth()->user()->isSuperAdmin(),
-            'avatar' => auth()->user()->getAvatarUrl(),
-            'quota' => [
-                'limit' => auth()->user()->getListingLimit(),
-                'used' => auth()->user()->getActiveListingCount(),
-                'remaining' => max(0, auth()->user()->getListingLimit() - auth()->user()->getActiveListingCount()),
-                'can_create' => auth()->user()->canCreateListing(),
-                'plan_name' => auth()->user()->activeSubscription?->plan?->name ?? 'Basic',
-            ]
-        ] : null);
+        window.__INITIAL_USER__ = {!! json_encode($initialUser) !!};
     </script>
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
     <style>
