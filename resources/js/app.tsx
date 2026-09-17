@@ -17,6 +17,7 @@ import { AuthModal } from './components/AuthModal';
 import { MessagesView } from './components/MessagesView';
 import { BuyerRequirementsView } from './components/BuyerRequirementsView';
 import { AiAssistantWidget } from './components/AiAssistantWidget';
+import { Lock, ShieldAlert, Loader2 } from 'lucide-react';
 
 declare global {
     interface Window {
@@ -35,58 +36,65 @@ const getPathForTab = (tab: string, username?: string | null): string => {
         case 'requirements': return '/requirements';
         case 'pricing': return '/pricing';
         case 'admin': return '/admin';
-        case 'profile': return '/profile';
+        case 'profile': return '/settings';
         case 'public-profile': return username ? `/profile/${username}` : '/browse';
         default: return '/';
     }
 };
 
-const resolveRoute = (): { tab: string; username: string | null; authModal: 'login' | 'register' | null } => {
+const resolveRoute = (): { tab: string; username: string | null; authModal: 'login' | 'register' | null; listingSlug: string | null } => {
     const path = window.location.pathname.toLowerCase();
     const search = new URLSearchParams(window.location.search);
 
     if (search.get('payment') === 'success') {
-        return { tab: 'pricing', username: null, authModal: null };
+        return { tab: 'pricing', username: null, authModal: null, listingSlug: null };
     }
     if (search.get('auth') === 'login' || path === '/login') {
-        return { tab: 'browse', username: null, authModal: 'login' };
+        return { tab: 'browse', username: null, authModal: 'login', listingSlug: null };
     }
     if (search.get('auth') === 'register' || path === '/register') {
-        return { tab: 'browse', username: null, authModal: 'register' };
+        return { tab: 'browse', username: null, authModal: 'register', listingSlug: null };
+    }
+
+    if (path.startsWith('/listings/')) {
+        const slug = window.location.pathname.replace(/^\/listings\//i, '').split('/')[0];
+        if (slug) {
+            return { tab: 'browse', username: null, authModal: null, listingSlug: decodeURIComponent(slug) };
+        }
     }
 
     if (path.startsWith('/profile/')) {
         const u = window.location.pathname.replace(/^\/profile\//i, '').split('/')[0];
         if (u) {
-            return { tab: 'public-profile', username: decodeURIComponent(u), authModal: null };
+            return { tab: 'public-profile', username: decodeURIComponent(u), authModal: null, listingSlug: null };
         }
     }
     if (path === '/profile' || path === '/settings' || path === '/account') {
-        return { tab: 'profile', username: null, authModal: null };
+        return { tab: 'profile', username: null, authModal: null, listingSlug: null };
     }
     if (path === '/my-listings') {
-        return { tab: 'my-listings', username: null, authModal: null };
+        return { tab: 'my-listings', username: null, authModal: null, listingSlug: null };
     }
     if (path === '/crm-leads' || path === '/leads') {
-        return { tab: 'crm-leads', username: null, authModal: null };
+        return { tab: 'crm-leads', username: null, authModal: null, listingSlug: null };
     }
     if (path === '/favorites' || path === '/saved') {
-        return { tab: 'favorites', username: null, authModal: null };
+        return { tab: 'favorites', username: null, authModal: null, listingSlug: null };
     }
     if (path === '/messages' || path.startsWith('/messages/')) {
-        return { tab: 'messages', username: null, authModal: null };
+        return { tab: 'messages', username: null, authModal: null, listingSlug: null };
     }
     if (path === '/requirements' || path === '/buyer-requirements') {
-        return { tab: 'requirements', username: null, authModal: null };
+        return { tab: 'requirements', username: null, authModal: null, listingSlug: null };
     }
     if (path === '/pricing' || path === '/plans' || path === '/subscriptions') {
-        return { tab: 'pricing', username: null, authModal: null };
+        return { tab: 'pricing', username: null, authModal: null, listingSlug: null };
     }
     if (path === '/admin') {
-        return { tab: 'admin', username: null, authModal: null };
+        return { tab: 'admin', username: null, authModal: null, listingSlug: null };
     }
 
-    return { tab: 'browse', username: null, authModal: null };
+    return { tab: 'browse', username: null, authModal: null, listingSlug: null };
 };
 
 export const App: React.FC = () => {
@@ -102,8 +110,27 @@ export const App: React.FC = () => {
     const [authModalOpen, setAuthModalOpen] = useState<'login' | 'register' | null>(initialRoute.authModal);
     const [crmNewCount, setCrmNewCount] = useState(0);
 
-    const navigateTo = (tab: string, extra: { username?: string | null; push?: boolean } = {}) => {
-        const { username = null, push = true } = extra;
+    const [authLoading, setAuthLoading] = useState<boolean>(() => {
+        return !window.__INITIAL_USER__ && !!(localStorage.getItem('zacma_auth_token') || window.__INITIAL_TOKEN__);
+    });
+
+    const handleSelectListing = (listing: Listing | null) => {
+        setSelectedListing(listing);
+        if (listing) {
+            const targetPath = `/listings/${listing.slug}`;
+            if (window.location.pathname !== targetPath) {
+                window.history.pushState({ tab: activeTab, username: viewingUsername, listingSlug: listing.slug }, '', targetPath);
+            }
+        } else {
+            const targetPath = getPathForTab(activeTab, viewingUsername);
+            if (window.location.pathname !== targetPath) {
+                window.history.pushState({ tab: activeTab, username: viewingUsername, listingSlug: null }, '', targetPath);
+            }
+        }
+    };
+
+    const navigateTo = (tab: string, extra: { username?: string | null; push?: boolean; listingSlug?: string | null } = {}) => {
+        const { username = null, push = true, listingSlug = null } = extra;
         setActiveTab(tab);
         if (tab === 'public-profile') {
             setViewingUsername(username);
@@ -112,26 +139,47 @@ export const App: React.FC = () => {
         }
 
         if (push) {
-            const targetPath = getPathForTab(tab, username);
+            let targetPath = getPathForTab(tab, username);
+            if (listingSlug) {
+                targetPath = `/listings/${listingSlug}`;
+            }
             if (window.location.pathname !== targetPath) {
-                window.history.pushState({ tab, username }, '', targetPath);
+                window.history.pushState({ tab, username, listingSlug }, '', targetPath);
             }
         }
     };
 
+    // Store initial history state and load initial listing if URL is /listings/{slug}
+    useEffect(() => {
+        const route = resolveRoute();
+        window.history.replaceState(
+            { tab: route.tab, username: route.username, listingSlug: route.listingSlug },
+            '',
+            window.location.pathname + window.location.search
+        );
+
+        if (route.listingSlug) {
+            api.getListing(route.listingSlug)
+                .then(l => setSelectedListing(l))
+                .catch(() => {});
+        }
+    }, []);
+
     // Listen to browser Back and Forward navigation (popstate)
     useEffect(() => {
         const handlePopState = (e: PopStateEvent) => {
-            if (e.state && e.state.tab) {
-                setActiveTab(e.state.tab);
-                setViewingUsername(e.state.username || null);
+            const route = resolveRoute();
+            setActiveTab(route.tab);
+            setViewingUsername(route.username);
+            if (route.listingSlug) {
+                api.getListing(route.listingSlug)
+                    .then(l => setSelectedListing(l))
+                    .catch(() => setSelectedListing(null));
             } else {
-                const route = resolveRoute();
-                setActiveTab(route.tab);
-                setViewingUsername(route.username);
-                if (route.authModal) {
-                    setAuthModalOpen(route.authModal);
-                }
+                setSelectedListing(null);
+            }
+            if (route.authModal) {
+                setAuthModalOpen(route.authModal);
             }
         };
 
@@ -141,8 +189,12 @@ export const App: React.FC = () => {
 
     // Initial check for auth state or refresh user
     useEffect(() => {
-        const token = localStorage.getItem('zacma_auth_token');
-        if (token || window.__INITIAL_USER__) {
+        const token = localStorage.getItem('zacma_auth_token') || window.__INITIAL_TOKEN__;
+        if (token) {
+            try {
+                localStorage.setItem('zacma_auth_token', token);
+            } catch (_) {}
+
             api.getMe()
                 .then(u => {
                     setUser(u);
@@ -155,7 +207,12 @@ export const App: React.FC = () => {
                         localStorage.removeItem('zacma_auth_token');
                         setUser(null);
                     }
+                })
+                .finally(() => {
+                    setAuthLoading(false);
                 });
+        } else {
+            setAuthLoading(false);
         }
     }, []);
 
@@ -185,9 +242,46 @@ export const App: React.FC = () => {
     };
 
     const handleViewSellerProfile = (username: string) => {
-        setSelectedListing(null);
+        handleSelectListing(null);
         navigateTo('public-profile', { username });
     };
+
+    const renderAuthLoading = () => (
+        <div className="max-w-4xl mx-auto py-12 px-4 space-y-4 animate-pulse">
+            <div className="h-8 bg-slate-200 rounded-2xl w-48"></div>
+            <div className="h-64 bg-white rounded-3xl border border-slate-200/80 p-6 space-y-4">
+                <div className="h-4 bg-slate-100 rounded w-3/4"></div>
+                <div className="h-4 bg-slate-100 rounded w-1/2"></div>
+                <div className="h-32 bg-slate-50 rounded-2xl"></div>
+            </div>
+        </div>
+    );
+
+    const renderAuthRequired = (title: string, description: string) => (
+        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200/80 p-8 max-w-md mx-auto shadow-xs my-8 animate-in fade-in duration-150">
+            <div className="h-12 w-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 mx-auto mb-4">
+                <Lock className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800">{title}</h3>
+            <p className="text-xs text-slate-500 mt-1 mb-6 leading-relaxed">
+                {description}
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                <button
+                    onClick={() => setAuthModalOpen('login')}
+                    className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition"
+                >
+                    Log In to Your Account
+                </button>
+                <button
+                    onClick={() => navigateTo('browse')}
+                    className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition"
+                >
+                    Browse Marketplace
+                </button>
+            </div>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col selection:bg-emerald-500 selection:text-white">
@@ -204,29 +298,50 @@ export const App: React.FC = () => {
             <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
                 {activeTab === 'browse' && (
                     <MarketplaceBrowse
-                        onSelectListing={(listing) => setSelectedListing(listing)}
+                        onSelectListing={handleSelectListing}
                         onToggleFavorite={handleToggleFavorite}
                     />
                 )}
 
-                {activeTab === 'my-listings' && user && (
-                    <MyListingsView
-                        user={user}
-                        onOpenPostListing={() => setPostListingOpen(true)}
-                        onNavigatePricing={() => navigateTo('pricing')}
-                        onSelectListing={(listing) => setSelectedListing(listing)}
-                    />
+                {activeTab === 'my-listings' && (
+                    authLoading ? renderAuthLoading() : (
+                        user ? (
+                            <MyListingsView
+                                user={user}
+                                onOpenPostListing={() => setPostListingOpen(true)}
+                                onNavigatePricing={() => navigateTo('pricing')}
+                                onSelectListing={handleSelectListing}
+                            />
+                        ) : renderAuthRequired(
+                            'Sign In Required',
+                            'You need to be signed in to manage your active listings and view analytics.'
+                        )
+                    )
                 )}
 
-                {activeTab === 'crm-leads' && user && (
-                    <CrmLeadsView />
+                {activeTab === 'crm-leads' && (
+                    authLoading ? renderAuthLoading() : (
+                        user ? (
+                            <CrmLeadsView />
+                        ) : renderAuthRequired(
+                            'Inbound Leads Require Sign In',
+                            'You need to be signed in to view and manage your inbound customer CRM leads.'
+                        )
+                    )
                 )}
 
-                {activeTab === 'favorites' && user && (
-                    <FavoritesView
-                        onSelectListing={(listing) => setSelectedListing(listing)}
-                        onBrowseMarket={() => navigateTo('browse')}
-                    />
+                {activeTab === 'favorites' && (
+                    authLoading ? renderAuthLoading() : (
+                        user ? (
+                            <FavoritesView
+                                onSelectListing={handleSelectListing}
+                                onBrowseMarket={() => navigateTo('browse')}
+                            />
+                        ) : renderAuthRequired(
+                            'Saved Listings',
+                            'Sign in to access your saved vehicle and property listings across all your devices.'
+                        )
+                    )
                 )}
 
                 {activeTab === 'pricing' && (
@@ -254,7 +369,9 @@ export const App: React.FC = () => {
                         initialRecipientId={chatRecipientId}
                         initialListingId={chatListingId}
                         onViewListing={(slug) => {
-                            navigateTo('browse');
+                            api.getListing(slug)
+                                .then(l => handleSelectListing(l))
+                                .catch(() => navigateTo('browse'));
                         }}
                     />
                 )}
@@ -265,36 +382,56 @@ export const App: React.FC = () => {
                         onBack={() => {
                             navigateTo('browse');
                         }}
-                        onSelectListing={(listing) => setSelectedListing(listing)}
+                        onSelectListing={handleSelectListing}
                         onToggleFavorite={handleToggleFavorite}
                     />
                 )}
 
                 {activeTab === 'profile' && (
-                    user ? (
-                        <ProfileSettingsView
-                            user={user}
-                            onUserUpdated={(updatedUser) => setUser(updatedUser)}
-                            onNavigateTab={(tab, extra) => navigateTo(tab, extra)}
-                        />
-                    ) : (
-                        <div className="text-center py-16 bg-white rounded-3xl border border-slate-200/80 p-8 max-w-md mx-auto shadow-xs">
-                            <h3 className="text-lg font-black text-slate-800">Sign In Required</h3>
-                            <p className="text-xs text-slate-500 mt-1 mb-5">
-                                You need to be logged in to view and edit your profile settings and dealership credentials.
-                            </p>
-                            <button
-                                onClick={() => setAuthModalOpen('login')}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition"
-                            >
-                                Log In to Your Account
-                            </button>
-                        </div>
+                    authLoading ? renderAuthLoading() : (
+                        user ? (
+                            <ProfileSettingsView
+                                user={user}
+                                onUserUpdated={(updatedUser) => setUser(updatedUser)}
+                                onNavigateTab={(tab, extra) => navigateTo(tab, extra)}
+                            />
+                        ) : renderAuthRequired(
+                            'Profile Settings',
+                            'You need to be logged in to view and edit your profile settings and dealership credentials.'
+                        )
                     )
                 )}
 
-                {activeTab === 'admin' && user?.is_super_admin && (
-                    <AdminDashboardView />
+                {activeTab === 'admin' && (
+                    authLoading ? renderAuthLoading() : (
+                        user?.is_super_admin ? (
+                            <AdminDashboardView />
+                        ) : (
+                            <div className="text-center py-16 bg-white rounded-3xl border border-rose-200 p-8 max-w-md mx-auto shadow-xs my-8 animate-in fade-in duration-150">
+                                <div className="h-12 w-12 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-600 mx-auto mb-4">
+                                    <ShieldAlert className="w-6 h-6" />
+                                </div>
+                                <h3 className="text-lg font-black text-slate-800">Super Admin Required</h3>
+                                <p className="text-xs text-slate-500 mt-1 mb-6 leading-relaxed">
+                                    The Admin Command Center is reserved for authorized platform administrators.
+                                </p>
+                                <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                                    <button
+                                        onClick={() => setAuthModalOpen('login')}
+                                        className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white text-xs font-black px-5 py-2.5 rounded-xl shadow-md transition"
+                                    >
+                                        Sign In as Admin
+                                    </button>
+                                    <button
+                                        onClick={() => navigateTo('browse')}
+                                        className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-4 py-2.5 rounded-xl transition"
+                                    >
+                                        Return to Marketplace
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    )
                 )}
             </main>
 
@@ -302,10 +439,11 @@ export const App: React.FC = () => {
             <ListingDetailModal
                 listing={selectedListing}
                 currentUser={user}
-                onClose={() => setSelectedListing(null)}
+                onClose={() => handleSelectListing(null)}
                 onToggleFavorite={handleToggleFavorite}
                 onViewProfile={handleViewSellerProfile}
                 onStartChat={(sellerId, listingId) => {
+                    handleSelectListing(null);
                     setChatRecipientId(sellerId);
                     setChatListingId(listingId);
                     navigateTo('messages');

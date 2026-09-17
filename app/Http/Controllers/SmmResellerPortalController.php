@@ -268,7 +268,7 @@ class SmmResellerPortalController extends Controller
     public function apiDocs()
     {
         $user = Auth::user();
-        $apiKeys = $user->resellerApiKeys()->latest()->get();
+        $apiKeys = $user ? $user->resellerApiKeys()->latest()->get() : collect();
         return view('reseller.api-docs', compact('apiKeys'));
     }
 

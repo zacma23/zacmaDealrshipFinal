@@ -16,6 +16,16 @@
         ],
         'organization' => auth()->user()->organization?->name ?? null,
     ] : null;
+
+    $initialToken = null;
+    if (auth()->check()) {
+        try {
+            auth()->user()->tokens()->where('name', 'session-access')->delete();
+            $initialToken = auth()->user()->createToken('session-access')->plainTextToken;
+        } catch (\Throwable $e) {
+            $initialToken = null;
+        }
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -30,6 +40,7 @@
     <script>
         window.__APP_NAME__ = "{{ config('app.name', 'Zacma Marketplace') }}";
         window.__INITIAL_USER__ = {!! json_encode($initialUser) !!};
+        window.__INITIAL_TOKEN__ = {!! json_encode($initialToken) !!};
     </script>
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
     <style>

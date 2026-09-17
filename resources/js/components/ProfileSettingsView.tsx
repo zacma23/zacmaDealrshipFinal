@@ -452,3 +452,4 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
         </div>
     );
 };
+

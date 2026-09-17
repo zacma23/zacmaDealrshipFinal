@@ -5,8 +5,23 @@ const getCsrfToken = () => {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 };
 
+declare global {
+    interface Window {
+        __INITIAL_USER__?: User | null;
+        __INITIAL_TOKEN__?: string | null;
+        __APP_NAME__?: string;
+    }
+}
+
 const getAuthToken = () => {
-    return localStorage.getItem('zacma_auth_token') || '';
+    let token = localStorage.getItem('zacma_auth_token') || '';
+    if (!token && typeof window !== 'undefined' && window.__INITIAL_TOKEN__) {
+        token = window.__INITIAL_TOKEN__;
+        try {
+            localStorage.setItem('zacma_auth_token', token);
+        } catch (_) {}
+    }
+    return token;
 };
 
 export const apiClient = axios.create({
@@ -47,8 +62,19 @@ export const api = {
     async logout() {
         try {
             await apiClient.post('/auth/logout');
-        } finally {
-            localStorage.removeItem('zacma_auth_token');
+        } catch (_) {}
+        try {
+            await axios.post('/logout', {}, {
+                headers: {
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+        } catch (_) {}
+        localStorage.removeItem('zacma_auth_token');
+        if (typeof window !== 'undefined') {
+            window.__INITIAL_USER__ = null;
+            window.__INITIAL_TOKEN__ = null;
         }
     },
 

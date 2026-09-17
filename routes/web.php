@@ -19,7 +19,7 @@ Route::get('/', function () {
 })->name('home');
 Route::get('/smm-portal', [MarketplaceController::class, 'index'])->name('smm.portal');
 Route::get('/services', [SmmCustomerPortalController::class, 'services'])->name('services.public');
-Route::get('/api-docs', [SmmResellerPortalController::class, 'apiDocs'])->name('api-docs.public');
+Route::get('/api-docs', [SmmResellerPortalController::class, 'apiDocs'])->middleware(['auth'])->name('api-docs.public');
 
 // ==========================================
 // AUTHENTICATION ROUTES
@@ -165,6 +165,9 @@ $spaFrontendRoutes = [
     '/plans',
     '/admin',
     '/settings',
+    '/account',
+    '/leads',
+    '/subscriptions',
     '/listings/{slug}',
 ];
 
