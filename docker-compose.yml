@@ -64,3 +64,4 @@ volumes:
   postgres_data:
   redis_data:
   storage_data:
+

@@ -102,3 +102,4 @@ class EbirrPaymentGateway implements PaymentGatewayInterface
         return !empty($request->header('X-Ebirr-Signature'));
     }
 }
+

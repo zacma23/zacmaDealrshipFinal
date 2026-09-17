@@ -13,6 +13,8 @@ import { SubscriptionView } from './components/SubscriptionView';
 import { PublicProfileView } from './components/PublicProfileView';
 import { AdminDashboardView } from './components/AdminDashboardView';
 import { AuthModal } from './components/AuthModal';
+import { MessagesView } from './components/MessagesView';
+import { BuyerRequirementsView } from './components/BuyerRequirementsView';
 
 declare global {
     interface Window {
@@ -26,6 +28,8 @@ export const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('browse');
     const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
     const [viewingUsername, setViewingUsername] = useState<string | null>(null);
+    const [chatRecipientId, setChatRecipientId] = useState<number | null>(null);
+    const [chatListingId, setChatListingId] = useState<number | null>(null);
 
     const [postListingOpen, setPostListingOpen] = useState(false);
     const [authModalOpen, setAuthModalOpen] = useState<'login' | 'register' | null>(null);
@@ -145,6 +149,30 @@ export const App: React.FC = () => {
                     />
                 )}
 
+                {activeTab === 'requirements' && (
+                    <BuyerRequirementsView
+                        currentUser={user}
+                        onRequireLogin={() => setAuthModalOpen('login')}
+                        onDirectMessage={(sellerId) => {
+                            setChatRecipientId(sellerId);
+                            setChatListingId(null);
+                            setActiveTab('messages');
+                        }}
+                    />
+                )}
+
+                {activeTab === 'messages' && (
+                    <MessagesView
+                        currentUser={user}
+                        initialRecipientId={chatRecipientId}
+                        initialListingId={chatListingId}
+                        onViewListing={(slug) => {
+                            // Can select or browse
+                            setActiveTab('browse');
+                        }}
+                    />
+                )}
+
                 {activeTab === 'public-profile' && viewingUsername && (
                     <PublicProfileView
                         username={viewingUsername}
@@ -169,6 +197,11 @@ export const App: React.FC = () => {
                 onClose={() => setSelectedListing(null)}
                 onToggleFavorite={handleToggleFavorite}
                 onViewProfile={handleViewSellerProfile}
+                onStartChat={(sellerId, listingId) => {
+                    setChatRecipientId(sellerId);
+                    setChatListingId(listingId);
+                    setActiveTab('messages');
+                }}
             />
 
             {postListingOpen && (

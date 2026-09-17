@@ -104,3 +104,4 @@ class SantimPayPaymentGateway implements PaymentGatewayInterface
         return !empty($request->header('X-Santimpay-Signature'));
     }
 }
+

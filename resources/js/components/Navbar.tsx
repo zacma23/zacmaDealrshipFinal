@@ -3,7 +3,8 @@ import { User } from '../types/marketplace';
 import { 
     Car, Home, Building2, Heart, Inbox, PlusCircle, 
     ShieldAlert, UserCheck, LogOut, User as UserIcon, 
-    Layers, Sparkles, Menu, X, ChevronDown, CheckCircle2
+    Layers, Sparkles, Menu, X, ChevronDown, CheckCircle2,
+    MessageSquare, HelpCircle
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -103,8 +104,32 @@ export const Navbar: React.FC<NavbarProps> = ({
                                         <Heart className="w-3.5 h-3.5" />
                                         <span>Saved</span>
                                     </button>
+
+                                    <button
+                                        onClick={() => onTabChange('messages')}
+                                        className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1 transition ${
+                                            activeTab === 'messages'
+                                                ? 'bg-slate-100 text-emerald-700'
+                                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <MessageSquare className="w-3.5 h-3.5" />
+                                        <span>Messages</span>
+                                    </button>
                                 </>
                             )}
+
+                            <button
+                                onClick={() => onTabChange('requirements')}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1 transition ${
+                                    activeTab === 'requirements'
+                                        ? 'bg-slate-100 text-emerald-700'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                }`}
+                            >
+                                <HelpCircle className="w-3.5 h-3.5" />
+                                <span>Buyer Needs</span>
+                            </button>
 
                             <button
                                 onClick={() => onTabChange('pricing')}
@@ -309,8 +334,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                                 >
                                     Saved Listings
                                 </button>
+                                <button
+                                    onClick={() => { onTabChange('messages'); setMobileMenuOpen(false); }}
+                                    className="text-left px-3 py-2 text-sm font-semibold rounded-lg hover:bg-slate-100 text-slate-800"
+                                >
+                                    Messages
+                                </button>
                             </>
                         )}
+                        <button
+                            onClick={() => { onTabChange('requirements'); setMobileMenuOpen(false); }}
+                            className="text-left px-3 py-2 text-sm font-semibold rounded-lg hover:bg-slate-100 text-slate-800"
+                        >
+                            Buyer Needs
+                        </button>
                         <button
                             onClick={() => { onTabChange('pricing'); setMobileMenuOpen(false); }}
                             className="text-left px-3 py-2 text-sm font-semibold rounded-lg hover:bg-slate-100 text-slate-800"

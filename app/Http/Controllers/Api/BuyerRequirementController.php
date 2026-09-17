@@ -102,3 +102,4 @@ class BuyerRequirementController extends Controller
         ]);
     }
 }
+

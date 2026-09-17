@@ -23,3 +23,4 @@ class PaymentGateway extends Model
         'credentials' => 'array',
     ];
 }
+

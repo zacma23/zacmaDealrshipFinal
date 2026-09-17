@@ -103,3 +103,4 @@ class CbePaymentGateway implements PaymentGatewayInterface
         return !empty($request->header('X-Cbe-Signature'));
     }
 }
+

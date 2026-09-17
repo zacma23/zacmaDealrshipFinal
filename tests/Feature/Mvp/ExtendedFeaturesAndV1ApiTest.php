@@ -208,3 +208,4 @@ class ExtendedFeaturesAndV1ApiTest extends TestCase
         $this->assertEquals('Bole Premium Motors', $userProfile->business_name);
     }
 }
+

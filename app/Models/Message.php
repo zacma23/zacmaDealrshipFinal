@@ -37,3 +37,4 @@ class Message extends Model
         return $this->belongsTo(Listing::class);
     }
 }
+
