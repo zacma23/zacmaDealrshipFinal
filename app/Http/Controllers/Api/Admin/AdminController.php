@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\RejectListingRequest;
 use App\Models\Category;
 use App\Models\Listing;
+use App\Models\PackageUpgradeRequest;
 use App\Models\Payment;
 use App\Models\PaymentGateway;
 use App\Models\Setting;
@@ -13,6 +14,9 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Notifications\ListingStatusUpdatedNotification;
+use App\Notifications\PackageUpgradeApprovedNotification;
+use App\Notifications\PackageUpgradeRejectedNotification;
+use App\Notifications\SubscriptionActivatedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +27,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 
 class AdminController extends Controller implements HasMiddleware
+
 {
     public static function middleware(): array
     {
@@ -49,6 +54,7 @@ class AdminController extends Controller implements HasMiddleware
         ];
 
         $pendingApprovalsCount = Listing::where('status', Listing::STATUS_PENDING)->count();
+        $pendingUpgradesCount = PackageUpgradeRequest::where('approval_status', PackageUpgradeRequest::APPROVAL_PENDING)->count();
         $activeSubscriptionsCount = Subscription::where('status', Subscription::STATUS_ACTIVE)
             ->where('ends_at', '>', now())
             ->count();
@@ -79,6 +85,7 @@ class AdminController extends Controller implements HasMiddleware
                     'total_listings' => $totalListings,
                     'listings_by_type' => $listingsByType,
                     'pending_approvals_count' => $pendingApprovalsCount,
+                    'pending_upgrades_count' => $pendingUpgradesCount,
                     'active_subscriptions' => $activeSubscriptionsCount,
                     'revenue_this_month_etb' => $revenueThisMonth,
                 ],
@@ -480,5 +487,176 @@ class AdminController extends Controller implements HasMiddleware
             'message' => 'Chapa payment gateway settings updated successfully.',
         ]);
     }
+
+    // ----------------------------------------------------
+    // Package Upgrade Requests & Verification
+    // ----------------------------------------------------
+
+    public function upgradeRequests(Request $request): JsonResponse
+    {
+        $query = PackageUpgradeRequest::with([
+            'user.profile',
+            'requestedPlan',
+            'currentPlan',
+            'payment',
+            'approvedBy',
+            'rejectedBy',
+        ]);
+
+        if ($request->filled('approval_status')) {
+            $query->where('approval_status', $request->input('approval_status'));
+        }
+
+        if ($request->filled('payment_status')) {
+            $query->where('payment_status', $request->input('payment_status'));
+        }
+
+        $requests = $query->latest()->paginate($request->input('per_page', 20));
+
+        return response()->json([
+            'status' => 'success',
+            'data' => $requests,
+        ]);
+    }
+
+    public function approveUpgradeRequest(PackageUpgradeRequest $upgradeRequest): JsonResponse
+    {
+        if ($upgradeRequest->approval_status === PackageUpgradeRequest::APPROVAL_APPROVED) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This upgrade request has already been approved.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($upgradeRequest) {
+            // 1. Deactivate existing active subscriptions
+            Subscription::where('user_id', $upgradeRequest->user_id)
+                ->where('status', Subscription::STATUS_ACTIVE)
+                ->update(['status' => Subscription::STATUS_EXPIRED]);
+
+            // 2. Determine duration based on billing cycle
+            $durationDays = match ($upgradeRequest->billing_cycle) {
+                'yearly' => 365,
+                'quarterly' => 90,
+                default => 30,
+            };
+
+            // 3. Create active subscription
+            $subscription = Subscription::create([
+                'user_id' => $upgradeRequest->user_id,
+                'plan_id' => $upgradeRequest->requested_plan_id,
+                'status' => Subscription::STATUS_ACTIVE,
+                'billing_cycle' => $upgradeRequest->billing_cycle,
+                'gateway' => $upgradeRequest->payment_gateway,
+                'starts_at' => now(),
+                'ends_at' => now()->addDays($durationDays),
+            ]);
+
+            // 4. Update payment if exists
+            if ($upgradeRequest->payment) {
+                $upgradeRequest->payment->update([
+                    'subscription_id' => $subscription->id,
+                    'status' => Payment::STATUS_COMPLETED,
+                    'verified_at' => $upgradeRequest->payment->verified_at ?? now(),
+                ]);
+            }
+
+            // 5. Update upgrade request
+            $upgradeRequest->update([
+                'approval_status' => PackageUpgradeRequest::APPROVAL_APPROVED,
+                'payment_status' => PackageUpgradeRequest::PAYMENT_VERIFIED,
+                'approved_by' => auth()->id(),
+                'approved_at' => now(),
+            ]);
+
+            // 6. Notify user
+            try {
+                $upgradeRequest->user?->notify(new PackageUpgradeApprovedNotification($upgradeRequest));
+                $upgradeRequest->user?->notify(new SubscriptionActivatedNotification($subscription));
+            } catch (\Throwable $e) {
+                Log::warning('Upgrade approval notification failed: ' . $e->getMessage());
+            }
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Package upgrade approved and activated successfully. Client now has access.',
+            'data' => $upgradeRequest->fresh([
+                'user.profile',
+                'requestedPlan',
+                'currentPlan',
+                'payment',
+                'approvedBy',
+            ]),
+        ]);
+    }
+
+    public function rejectUpgradeRequest(Request $request, PackageUpgradeRequest $upgradeRequest): JsonResponse
+    {
+        $validated = $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        if ($upgradeRequest->approval_status === PackageUpgradeRequest::APPROVAL_APPROVED) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cannot reject an already approved upgrade request.',
+            ], 422);
+        }
+
+        $upgradeRequest->update([
+            'approval_status' => PackageUpgradeRequest::APPROVAL_REJECTED,
+            'rejection_reason' => $validated['reason'],
+            'rejected_by' => auth()->id(),
+            'rejected_at' => now(),
+        ]);
+
+        try {
+            $upgradeRequest->user?->notify(new PackageUpgradeRejectedNotification($upgradeRequest, $validated['reason']));
+        } catch (\Throwable $e) {
+            Log::warning('Upgrade rejection notification failed: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Package upgrade request rejected with reason provided to client.',
+            'data' => $upgradeRequest->fresh([
+                'user.profile',
+                'requestedPlan',
+                'currentPlan',
+                'rejectedBy',
+            ]),
+        ]);
+    }
+
+    public function verifyUpgradePayment(PackageUpgradeRequest $upgradeRequest): JsonResponse
+    {
+        DB::transaction(function () use ($upgradeRequest) {
+            if ($upgradeRequest->payment) {
+                $upgradeRequest->payment->update([
+                    'status' => Payment::STATUS_COMPLETED,
+                    'verified_at' => now(),
+                ]);
+            }
+
+            $upgradeRequest->update([
+                'payment_status' => PackageUpgradeRequest::PAYMENT_VERIFIED,
+                'paid_at' => $upgradeRequest->paid_at ?? now(),
+            ]);
+
+            try {
+                $upgradeRequest->user?->notify(new \App\Notifications\PackageUpgradePaymentReceivedNotification($upgradeRequest));
+            } catch (\Throwable $e) {
+                Log::warning('Payment verification notification failed: ' . $e->getMessage());
+            }
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Payment verified successfully. Awaiting final upgrade approval.',
+            'data' => $upgradeRequest->fresh(['payment', 'user']),
+        ]);
+    }
 }
+
 

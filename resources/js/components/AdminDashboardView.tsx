@@ -7,13 +7,18 @@ import {
     ToggleLeft, ToggleRight, Plus, ChevronDown, ChevronRight, Shield
 } from 'lucide-react';
 
-type AdminSubTab = 'overview' | 'approvals' | 'users' | 'categories' | 'plans' | 'transactions' | 'gateways' | 'vehicle-catalog';
+type AdminSubTab = 'overview' | 'approvals' | 'upgrades' | 'users' | 'categories' | 'plans' | 'transactions' | 'gateways' | 'vehicle-catalog';
 
 export const AdminDashboardView: React.FC = () => {
     const [subTab, setSubTab] = useState<AdminSubTab>('overview');
 
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [pendingListings, setPendingListings] = useState<any[]>([]);
+    const [upgradeRequestsList, setUpgradeRequestsList] = useState<any[]>([]);
+    const [upgradeStatusFilter, setUpgradeStatusFilter] = useState<string>('all');
+    const [rejectingUpgradeId, setRejectingUpgradeId] = useState<number | null>(null);
+    const [upgradeRejectionReason, setUpgradeRejectionReason] = useState('');
+    const [upgradeActionLoading, setUpgradeActionLoading] = useState(false);
     const [usersList, setUsersList] = useState<any[]>([]);
     const [categoriesList, setCategoriesList] = useState<any[]>([]);
     const [plansList, setPlansList] = useState<any[]>([]);
@@ -114,8 +119,66 @@ export const AdminDashboardView: React.FC = () => {
         }
     };
 
+    const loadUpgradeRequests = async (status?: string) => {
+        try {
+            const filter = status !== undefined ? status : upgradeStatusFilter;
+            const params: Record<string, any> = {};
+            if (filter && filter !== 'all') {
+                params.approval_status = filter;
+            }
+            const data = await api.getAdminUpgradeRequests(params);
+            setUpgradeRequestsList(data.data || []);
+        } catch (err) {
+            console.error('Failed to load upgrade requests', err);
+        }
+    };
+
+    const handleApproveUpgrade = async (id: number) => {
+        if (!confirm('Approve this package upgrade and activate new quota for the client?')) return;
+        setUpgradeActionLoading(true);
+        try {
+            await api.approveUpgradeRequest(id);
+            loadUpgradeRequests();
+            loadDashboard();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to approve upgrade request.');
+        } finally {
+            setUpgradeActionLoading(false);
+        }
+    };
+
+    const handleRejectUpgradeSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!rejectingUpgradeId || !upgradeRejectionReason.trim()) return;
+        setUpgradeActionLoading(true);
+        try {
+            await api.rejectUpgradeRequest(rejectingUpgradeId, upgradeRejectionReason);
+            setRejectingUpgradeId(null);
+            setUpgradeRejectionReason('');
+            loadUpgradeRequests();
+            loadDashboard();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to reject upgrade request.');
+        } finally {
+            setUpgradeActionLoading(false);
+        }
+    };
+
+    const handleVerifyUpgradePayment = async (id: number) => {
+        setUpgradeActionLoading(true);
+        try {
+            await api.verifyUpgradePayment(id);
+            loadUpgradeRequests();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to verify payment.');
+        } finally {
+            setUpgradeActionLoading(false);
+        }
+    };
+
     const handleTabSwitch = (tab: AdminSubTab) => {
         setSubTab(tab);
+        if (tab === 'upgrades') loadUpgradeRequests();
         if (tab === 'users') loadUsers();
         if (tab === 'categories') loadCategories();
         if (tab === 'plans') loadPlans();
@@ -310,6 +373,7 @@ export const AdminDashboardView: React.FC = () => {
                 {[
                     { key: 'overview', label: 'Dashboard Overview' },
                     { key: 'approvals', label: `Approvals Queue (${metrics?.pending_approvals_count ?? 0})` },
+                    { key: 'upgrades', label: `Upgrade Requests (${metrics?.pending_upgrades_count ?? 0})` },
                     { key: 'users', label: 'User Accounts' },
                     { key: 'categories', label: 'Categories' },
                     { key: 'plans', label: 'Subscription Plans' },
@@ -335,7 +399,7 @@ export const AdminDashboardView: React.FC = () => {
             {subTab === 'overview' && (
                 <div className="space-y-6">
                     {/* Metrics Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
                             <div className="flex items-center justify-between text-slate-400">
                                 <span className="text-[11px] font-bold uppercase">Total Users</span>
@@ -344,12 +408,20 @@ export const AdminDashboardView: React.FC = () => {
                             <p className="text-2xl font-black text-slate-900">{metrics?.total_users ?? 0}</p>
                         </div>
 
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1 cursor-pointer hover:border-amber-400 transition" onClick={() => handleTabSwitch('approvals')}>
                             <div className="flex items-center justify-between text-slate-400">
-                                <span className="text-[11px] font-bold uppercase">Pending Queue</span>
+                                <span className="text-[11px] font-bold uppercase">Listing Queue</span>
                                 <Clock className="w-4 h-4 text-amber-600" />
                             </div>
                             <p className="text-2xl font-black text-amber-600">{metrics?.pending_approvals_count ?? 0}</p>
+                        </div>
+
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1 cursor-pointer hover:border-emerald-400 transition" onClick={() => handleTabSwitch('upgrades')}>
+                            <div className="flex items-center justify-between text-slate-400">
+                                <span className="text-[11px] font-bold uppercase">Upgrade Req</span>
+                                <Sparkles className="w-4 h-4 text-emerald-600" />
+                            </div>
+                            <p className="text-2xl font-black text-emerald-600">{metrics?.pending_upgrades_count ?? 0}</p>
                         </div>
 
                         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
@@ -368,7 +440,7 @@ export const AdminDashboardView: React.FC = () => {
                             <p className="text-2xl font-black text-slate-900">{metrics?.total_listings ?? 0}</p>
                         </div>
 
-                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1 col-span-2 md:col-span-1">
+                        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-1">
                             <div className="flex items-center justify-between text-slate-400">
                                 <span className="text-[11px] font-bold uppercase">Revenue (Month)</span>
                                 <DollarSign className="w-4 h-4 text-emerald-600" />
@@ -536,6 +608,165 @@ export const AdminDashboardView: React.FC = () => {
                     ) : (
                         <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs text-slate-500">
                             No listings waiting for approval.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TAB: UPGRADE REQUESTS */}
+            {subTab === 'upgrades' && (
+                <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                        <div>
+                            <h3 className="font-extrabold text-slate-900 text-base">Client Package Upgrade Requests</h3>
+                            <p className="text-xs text-slate-500">Review package upgrades, verify incoming payments, and approve tier activations.</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 overflow-x-auto">
+                            {[
+                                { key: 'all', label: 'All Requests' },
+                                { key: 'pending', label: 'Pending Approval' },
+                                { key: 'approved', label: 'Approved' },
+                                { key: 'rejected', label: 'Rejected' },
+                            ].map(f => (
+                                <button
+                                    key={f.key}
+                                    onClick={() => {
+                                        setUpgradeStatusFilter(f.key);
+                                        loadUpgradeRequests(f.key);
+                                    }}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                                        upgradeStatusFilter === f.key
+                                            ? 'bg-slate-900 text-white'
+                                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {f.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {upgradeRequestsList.length > 0 ? (
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-xs">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                                            <th className="p-3">Client</th>
+                                            <th className="p-3">Requested Package</th>
+                                            <th className="p-3">Amount & Gateway</th>
+                                            <th className="p-3">Payment Status</th>
+                                            <th className="p-3">Approval Status</th>
+                                            <th className="p-3">Date</th>
+                                            <th className="p-3 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {upgradeRequestsList.map((req: any) => (
+                                            <tr key={req.id} className="hover:bg-slate-50/50 transition">
+                                                <td className="p-3">
+                                                    <div className="font-bold text-slate-900">{req.user?.name || 'Client'}</div>
+                                                    <div className="text-[11px] text-slate-500">{req.user?.email}</div>
+                                                    {req.user?.phone && <div className="text-[10px] text-slate-400">{req.user.phone}</div>}
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="font-bold text-emerald-800 flex items-center gap-1">
+                                                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                                                        <span>{req.requested_plan?.name || req.requestedPlan?.name || 'Plan'}</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500">
+                                                        From: {req.current_plan?.name || req.currentPlan?.name || 'Basic'} • {req.billing_cycle}
+                                                    </div>
+                                                </td>
+                                                <td className="p-3">
+                                                    <div className="font-bold text-slate-900">{req.currency} {Number(req.price).toLocaleString()}</div>
+                                                    <div className="text-[10px] uppercase font-semibold text-slate-500">{req.payment_gateway}</div>
+                                                    {req.payment_reference && (
+                                                        <div className="text-[10px] font-mono text-slate-400 truncate max-w-[120px]" title={req.payment_reference}>
+                                                            {req.payment_reference}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="p-3">
+                                                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                        req.payment_status === 'verified' || req.payment_status === 'paid'
+                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                            : req.payment_status === 'pending'
+                                                            ? 'bg-amber-100 text-amber-800'
+                                                            : 'bg-rose-100 text-rose-800'
+                                                    }`}>
+                                                        {req.payment_status === 'verified' ? 'Verified' : req.payment_status === 'paid' ? 'Paid' : req.payment_status === 'pending' ? 'Pending Payment' : req.payment_status}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3">
+                                                    <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                        req.approval_status === 'approved'
+                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                            : req.approval_status === 'pending'
+                                                            ? 'bg-blue-100 text-blue-800'
+                                                            : 'bg-rose-100 text-rose-800'
+                                                    }`}>
+                                                        {req.approval_status === 'approved' ? 'Approved' : req.approval_status === 'pending' ? 'Pending Approval' : 'Rejected'}
+                                                    </span>
+                                                    {req.approval_status === 'rejected' && req.rejection_reason && (
+                                                        <p className="text-[10px] text-rose-600 mt-0.5 line-clamp-1" title={req.rejection_reason}>
+                                                            Reason: {req.rejection_reason}
+                                                        </p>
+                                                    )}
+                                                </td>
+                                                <td className="p-3 text-slate-500 text-[11px] whitespace-nowrap">
+                                                    {new Date(req.created_at).toLocaleDateString()}
+                                                </td>
+                                                <td className="p-3 text-right">
+                                                    <div className="inline-flex items-center gap-1.5">
+                                                        {req.payment_status === 'pending' && (
+                                                            <button
+                                                                onClick={() => handleVerifyUpgradePayment(req.id)}
+                                                                disabled={upgradeActionLoading}
+                                                                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition disabled:opacity-50"
+                                                                title="Verify manual/bank payment"
+                                                            >
+                                                                Verify Pay
+                                                            </button>
+                                                        )}
+                                                        {req.approval_status === 'pending' && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleApproveUpgrade(req.id)}
+                                                                    disabled={upgradeActionLoading}
+                                                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-xs disabled:opacity-50"
+                                                                >
+                                                                    Approve
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setRejectingUpgradeId(req.id);
+                                                                        setUpgradeRejectionReason('');
+                                                                    }}
+                                                                    disabled={upgradeActionLoading}
+                                                                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition disabled:opacity-50"
+                                                                >
+                                                                    Reject
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                        {req.approval_status === 'approved' && (
+                                                            <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
+                                                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                                                <span>Active</span>
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center text-xs text-slate-500">
+                            No package upgrade requests matching this status filter.
                         </div>
                     )}
                 </div>
@@ -1096,6 +1327,55 @@ export const AdminDashboardView: React.FC = () => {
                                     className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2 rounded-xl disabled:opacity-50"
                                 >
                                     {rejectLoading ? 'Rejecting...' : 'Confirm Rejection'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* UPGRADE REJECTION REASON MODAL */}
+            {rejectingUpgradeId && (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h3 className="font-bold text-slate-900 text-sm">Reject Package Upgrade with Reason</h3>
+                            <button
+                                onClick={() => setRejectingUpgradeId(null)}
+                                className="text-slate-400 hover:text-slate-700"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleRejectUpgradeSubmit} className="space-y-3 text-xs">
+                            <p className="text-slate-500 text-[11px]">
+                                State why this package upgrade request cannot be approved (e.g. invalid payment proof, unverified bank transfer). The client will be notified.
+                            </p>
+
+                            <textarea
+                                required
+                                rows={4}
+                                value={upgradeRejectionReason}
+                                onChange={(e) => setUpgradeRejectionReason(e.target.value)}
+                                placeholder="e.g. Payment transaction could not be verified on the banking portal. Please contact support with transfer slip."
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:ring-2 focus:ring-rose-500 focus:outline-none resize-none"
+                            ></textarea>
+
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setRejectingUpgradeId(null)}
+                                    className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={upgradeActionLoading || !upgradeRejectionReason.trim()}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-5 py-2 rounded-xl disabled:opacity-50"
+                                >
+                                    {upgradeActionLoading ? 'Rejecting...' : 'Confirm Rejection'}
                                 </button>
                             </div>
                         </form>

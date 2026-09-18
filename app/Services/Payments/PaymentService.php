@@ -34,7 +34,8 @@ class PaymentService
         SubscriptionPlan $plan,
         ?string $returnUrl = null,
         string $gatewayName = 'chapa',
-        string $billingCycle = 'monthly'
+        string $billingCycle = 'monthly',
+        ?int $upgradeRequestId = null
     ): array {
         $reference = 'TX-ZACMA-' . strtoupper(Str::random(12));
 
@@ -60,6 +61,7 @@ class PaymentService
                 'user_email' => $user->email,
                 'billing_cycle' => $billingCycle,
                 'gateway' => $gatewayName,
+                'upgrade_request_id' => $upgradeRequestId,
             ],
         ]);
 
@@ -116,6 +118,7 @@ class PaymentService
             }
 
             // Mark completed
+            // Mark payment completed
             $payment->update([
                 'status' => Payment::STATUS_COMPLETED,
                 'provider_reference' => $payload['reference'] ?? $payload['id'] ?? null,
@@ -125,6 +128,38 @@ class PaymentService
             ]);
 
             // Activate or extend subscription
+            // CHECK FOR PACKAGE UPGRADE REQUEST:
+            // If this payment is associated with a Package Upgrade Request, update the upgrade request's
+            // payment status to 'paid' but DO NOT activate the package immediately.
+            // Admin must review and approve the upgrade before package activation.
+            $upgradeRequest = \App\Models\PackageUpgradeRequest::where('payment_id', $payment->id)
+                ->orWhere('payment_reference', $reference)
+                ->orWhere('id', $payment->request_payload['upgrade_request_id'] ?? 0)
+                ->first();
+
+            if ($upgradeRequest) {
+                $upgradeRequest->update([
+                    'payment_status' => \App\Models\PackageUpgradeRequest::PAYMENT_PAID,
+                    'paid_at' => now(),
+                ]);
+
+                // Notify user: Payment received – Awaiting Admin Approval
+                try {
+                    $payment->user?->notify(new \App\Notifications\PackageUpgradePaymentReceivedNotification($upgradeRequest));
+                } catch (\Throwable $e) {
+                    Log::warning('Payment received notification failed: ' . $e->getMessage());
+                }
+
+                return [
+                    'success' => true,
+                    'idempotent' => false,
+                    'message' => 'Payment received – Awaiting Admin Approval',
+                    'payment' => $payment,
+                    'upgrade_request' => $upgradeRequest,
+                ];
+            }
+
+            // Standard / Legacy direct activation (when no upgrade request approval workflow is attached)
             $plan = $payment->plan ?: SubscriptionPlan::find($payment->plan_id);
             if ($plan && $payment->user) {
                 $user = $payment->user;

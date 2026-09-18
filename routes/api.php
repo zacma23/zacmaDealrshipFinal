@@ -115,6 +115,10 @@ $registerMarketplaceApiRoutes = function () {
         Route::post('/messages/send', [MessageController::class, 'send']);
 
         // Subscriptions & Multi-Gateway Checkout (Chapa, Telebirr, CBE, eBirr, SantimPay)
+        // Subscriptions & Package Upgrade Requests
+        Route::post('/subscriptions/upgrade-request', [SubscriptionController::class, 'requestUpgrade']);
+        Route::get('/subscriptions/upgrade-requests', [SubscriptionController::class, 'upgradeHistory']);
+        Route::get('/subscriptions/upgrade-requests/current', [SubscriptionController::class, 'currentUpgradeRequest']);
         Route::post('/subscriptions/checkout', [SubscriptionController::class, 'checkout']);
         Route::get('/payments/history', [SubscriptionController::class, 'history']);
 
@@ -132,6 +136,12 @@ $registerMarketplaceApiRoutes = function () {
             Route::get('/plans', [AdminController::class, 'plans']);
             Route::match(['put', 'post'], '/plans/{plan}', [AdminController::class, 'updatePlan']);
             Route::get('/transactions', [AdminController::class, 'transactions']);
+
+            // Package Upgrade Requests & Verification
+            Route::get('/upgrade-requests', [AdminController::class, 'upgradeRequests']);
+            Route::post('/upgrade-requests/{upgradeRequest}/approve', [AdminController::class, 'approveUpgradeRequest']);
+            Route::post('/upgrade-requests/{upgradeRequest}/reject', [AdminController::class, 'rejectUpgradeRequest']);
+            Route::post('/upgrade-requests/{upgradeRequest}/verify-payment', [AdminController::class, 'verifyUpgradePayment']);
 
             // Legacy single-provider endpoint (kept for backward compat)
             Route::get('/gateway-settings', [AdminController::class, 'gatewaySettings']);

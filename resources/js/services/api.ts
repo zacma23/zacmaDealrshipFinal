@@ -398,6 +398,42 @@ export const api = {
         const res = await apiClient.post('/listings/ai-assist', data);
         return res.data.data;
     },
+
+    // Package Upgrade Requests (Client & Admin)
+    async requestPackageUpgrade(data: { plan_id: number; gateway?: string; billing_cycle?: string; return_url?: string }) {
+        const res = await apiClient.post('/subscriptions/upgrade-request', data);
+        return res.data;
+    },
+
+    async getCurrentUpgradeRequest() {
+        const res = await apiClient.get('/subscriptions/upgrade-requests/current');
+        return res.data.data;
+    },
+
+    async getUpgradeHistory() {
+        const res = await apiClient.get('/subscriptions/upgrade-requests');
+        return res.data.data;
+    },
+
+    async getAdminUpgradeRequests(params?: { approval_status?: string; payment_status?: string; page?: number }) {
+        const res = await apiClient.get('/admin/upgrade-requests', { params });
+        return res.data.data;
+    },
+
+    async approveUpgradeRequest(requestId: number) {
+        const res = await apiClient.post(`/admin/upgrade-requests/${requestId}/approve`);
+        return res.data;
+    },
+
+    async rejectUpgradeRequest(requestId: number, reason: string) {
+        const res = await apiClient.post(`/admin/upgrade-requests/${requestId}/reject`, { reason });
+        return res.data;
+    },
+
+    async verifyUpgradePayment(requestId: number) {
+        const res = await apiClient.post(`/admin/upgrade-requests/${requestId}/verify-payment`);
+        return res.data;
+    },
 };
 
 

@@ -17,6 +17,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 }) => {
     const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
     const [currentSubscription, setCurrentSubscription] = useState<any>(null);
+    const [pendingUpgradeRequest, setPendingUpgradeRequest] = useState<any>(null);
     const [payments, setPayments] = useState<PaymentTransaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [checkoutLoading, setCheckoutLoading] = useState<number | null>(null);
@@ -30,6 +31,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             const plansRes = await api.getPlans();
             setPlans(plansRes.data || []);
             setCurrentSubscription(plansRes.current_subscription || null);
+            setPendingUpgradeRequest(plansRes.pending_upgrade_request || null);
 
             if (user) {
                 const historyRes = await api.getPaymentHistory();
@@ -170,6 +172,64 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                         <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
                     )}
                     <span className="font-semibold">{message.text}</span>
+                </div>
+            )}
+
+            {/* Pending Upgrade Request Banner */}
+            {pendingUpgradeRequest && (
+                <div className="max-w-4xl mx-auto">
+                    {pendingUpgradeRequest.approval_status === 'pending' && (
+                        <div className={`p-5 rounded-3xl border text-xs space-y-2 shadow-xs ${
+                            pendingUpgradeRequest.payment_status === 'paid' || pendingUpgradeRequest.payment_status === 'verified'
+                                ? 'bg-emerald-50/80 border-emerald-300 text-emerald-950'
+                                : 'bg-amber-50/80 border-amber-300 text-amber-950'
+                        }`}>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                                        <h4 className="font-extrabold text-sm">
+                                            Upgrade Request: {pendingUpgradeRequest.requested_plan_name}
+                                        </h4>
+                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                            pendingUpgradeRequest.payment_status === 'paid' || pendingUpgradeRequest.payment_status === 'verified'
+                                                ? 'bg-emerald-200 text-emerald-900'
+                                                : 'bg-amber-200 text-amber-900'
+                                        }`}>
+                                            {pendingUpgradeRequest.payment_status === 'paid' || pendingUpgradeRequest.payment_status === 'verified'
+                                                ? 'Payment Received – Awaiting Admin Approval'
+                                                : 'Pending Payment'}
+                                        </span>
+                                    </div>
+                                    <p className="text-slate-600 text-xs">
+                                        {pendingUpgradeRequest.payment_status === 'paid' || pendingUpgradeRequest.payment_status === 'verified'
+                                            ? `We have received your payment of ${pendingUpgradeRequest.currency} ${Number(pendingUpgradeRequest.price).toLocaleString()} via ${pendingUpgradeRequest.payment_gateway}. Your current package (${pendingUpgradeRequest.current_plan_name}) remains active while an administrator verifies your payment and activates your upgrade.`
+                                            : `Amount due: ${pendingUpgradeRequest.currency} ${Number(pendingUpgradeRequest.price).toLocaleString()} via ${pendingUpgradeRequest.payment_gateway}. Reference: ${pendingUpgradeRequest.payment_reference}. Please complete your payment to proceed to admin approval.`}
+                                    </p>
+                                </div>
+                                {pendingUpgradeRequest.payment_status === 'pending' && pendingUpgradeRequest.payment_url && (
+                                    <a
+                                        href={pendingUpgradeRequest.payment_url}
+                                        className="shrink-0 inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-md transition"
+                                    >
+                                        <span>Complete Payment Now</span>
+                                        <ExternalLink className="w-3.5 h-3.5" />
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {pendingUpgradeRequest.approval_status === 'rejected' && (
+                        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-1">
+                            <div className="flex items-center gap-2 font-bold text-rose-800">
+                                <AlertCircle className="w-4 h-4 text-rose-600" />
+                                <span>Recent Upgrade Request Not Approved</span>
+                            </div>
+                            <p className="text-slate-600 text-xs">
+                                Your upgrade to {pendingUpgradeRequest.requested_plan_name} was reviewed: "{pendingUpgradeRequest.rejection_reason}". Your existing {pendingUpgradeRequest.current_plan_name} package remains active.
+                            </p>
+                        </div>
+                    )}
                 </div>
             )}
 
