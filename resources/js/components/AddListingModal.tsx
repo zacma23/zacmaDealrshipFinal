@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Category, Listing, ListingType, User } from '../types/marketplace';
 import { api } from '../services/api';
 import { 
     X, Plus, Upload, AlertCircle, CheckCircle2, 
-    Car, Home, Building2, Sparkles, ChevronRight, Layers
+    Car, Home, Building2, Sparkles, ChevronRight, Layers,
+    Wand2, ChevronDown, Search, Loader2
 } from 'lucide-react';
 
 interface AddListingModalProps {
@@ -12,6 +13,25 @@ interface AddListingModalProps {
     onListingCreated: () => void;
     onNavigatePricing: () => void;
     onRequireLogin: () => void;
+}
+
+interface VehicleBrand { id: number; name: string; slug: string; }
+interface VehicleModelItem { id: number; name: string; slug: string; body_type?: string; }
+
+interface AiSuggestion {
+    brand: string | null;
+    model: string | null;
+    year: number | null;
+    color: string | null;
+    body_type: string | null;
+    transmission: string | null;
+    fuel_type: string | null;
+    mileage: number | null;
+    condition: string | null;
+    title: string | null;
+    description: string | null;
+    missing_fields: string[];
+    confidence: number;
 }
 
 export const AddListingModal: React.FC<AddListingModalProps> = ({
@@ -57,6 +77,14 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
     const [categories, setCategories] = useState<Category[]>([]);
     const [cities, setCities] = useState<string[]>([]);
 
+    // Vehicle brand/model catalog
+    const [vehicleBrands, setVehicleBrands] = useState<VehicleBrand[]>([]);
+    const [vehicleModels, setVehicleModels] = useState<VehicleModelItem[]>([]);
+    const [brandSearch, setBrandSearch] = useState('');
+    const [showBrandDropdown, setShowBrandDropdown] = useState(false);
+    const [selectedBrand, setSelectedBrand] = useState<VehicleBrand | null>(null);
+    const brandRef = useRef<HTMLDivElement>(null);
+
     // Form fields
     const [type, setType] = useState<ListingType>('vehicle');
     const [categoryId, setCategoryId] = useState('');
@@ -70,7 +98,8 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
     // Type-specific attributes
     const [attributes, setAttributes] = useState<Record<string, any>>({
-        brand: 'Toyota',
+        brand: '',
+        model: '',
         transmission: 'Automatic',
         fuel_type: 'Petrol',
         condition: 'Local Used',
@@ -88,6 +117,13 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // AI Assist state
+    const [showAiPanel, setShowAiPanel] = useState(false);
+    const [aiDescription, setAiDescription] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiSuggestion, setAiSuggestion] = useState<AiSuggestion | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
+
     useEffect(() => {
         Promise.all([
             api.getCategories(type),
@@ -100,6 +136,57 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
             setCities(cty);
         });
     }, [type]);
+
+    // Load vehicle brands on mount
+    useEffect(() => {
+        api.getVehicleBrands().then(brands => {
+            setVehicleBrands(brands || []);
+        }).catch(() => {});
+    }, []);
+
+    // Load models when brand changes
+    useEffect(() => {
+        if (selectedBrand) {
+            api.getVehicleModels(selectedBrand.id).then(models => {
+                setVehicleModels(models || []);
+            }).catch(() => {});
+        } else {
+            setVehicleModels([]);
+        }
+    }, [selectedBrand]);
+
+    // Close brand dropdown on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (brandRef.current && !brandRef.current.contains(e.target as Node)) {
+                setShowBrandDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const filteredBrands = vehicleBrands.filter(b =>
+        b.name.toLowerCase().includes(brandSearch.toLowerCase())
+    );
+
+    const handleSelectBrand = (brand: VehicleBrand) => {
+        setSelectedBrand(brand);
+        setBrandSearch(brand.name);
+        setShowBrandDropdown(false);
+        handleAttrChange('brand', brand.name);
+        handleAttrChange('model', '');
+    };
+
+    const handleBrandInput = (val: string) => {
+        setBrandSearch(val);
+        setShowBrandDropdown(true);
+        handleAttrChange('brand', val);
+        if (!val) {
+            setSelectedBrand(null);
+            setVehicleModels([]);
+        }
+    };
 
     const handleAttrChange = (key: string, val: any) => {
         setAttributes(prev => ({ ...prev, [key]: val }));
@@ -158,6 +245,57 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
         } finally {
             setLoading(false);
         }
+    };
+
+    // AI Assist handlers
+    const handleAiAnalyze = async () => {
+        if (!aiDescription.trim()) return;
+        setAiLoading(true);
+        setAiError(null);
+        setAiSuggestion(null);
+        try {
+            const suggestion = await api.aiAssistVehicle({ description: aiDescription });
+            setAiSuggestion(suggestion);
+        } catch (err: any) {
+            setAiError(err.response?.data?.message || 'AI analysis failed. Please try again.');
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const handleApplyAiSuggestion = () => {
+        if (!aiSuggestion) return;
+
+        // Apply fields only if AI provided a value — never overwrite with null
+        if (aiSuggestion.brand) {
+            const matchedBrand = vehicleBrands.find(b => b.name.toLowerCase() === aiSuggestion.brand!.toLowerCase());
+            if (matchedBrand) {
+                setSelectedBrand(matchedBrand);
+                setBrandSearch(matchedBrand.name);
+            } else {
+                setBrandSearch(aiSuggestion.brand);
+            }
+            handleAttrChange('brand', aiSuggestion.brand);
+        }
+        if (aiSuggestion.model) handleAttrChange('model', aiSuggestion.model);
+        if (aiSuggestion.year) setYear(String(aiSuggestion.year));
+        if (aiSuggestion.color) handleAttrChange('color', aiSuggestion.color);
+        if (aiSuggestion.body_type) handleAttrChange('body_type', aiSuggestion.body_type);
+        if (aiSuggestion.transmission) handleAttrChange('transmission', aiSuggestion.transmission);
+        if (aiSuggestion.fuel_type) handleAttrChange('fuel_type', aiSuggestion.fuel_type);
+        if (aiSuggestion.mileage) handleAttrChange('mileage', String(aiSuggestion.mileage));
+        if (aiSuggestion.condition) handleAttrChange('condition', aiSuggestion.condition);
+        if (aiSuggestion.title && !title) setTitle(aiSuggestion.title);
+        if (aiSuggestion.description && !description) setDescription(aiSuggestion.description);
+
+        setShowAiPanel(false);
+        setAiSuggestion(null);
+    };
+
+    const confidenceColor = (c: number) => {
+        if (c >= 0.7) return 'text-emerald-700 bg-emerald-50';
+        if (c >= 0.4) return 'text-amber-700 bg-amber-50';
+        return 'text-rose-700 bg-rose-50';
     };
 
     return (
@@ -343,22 +481,192 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
                     {/* Dynamic Specifications */}
                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            {type.replace('_', ' ')} Specifications
-                        </span>
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                                {type.replace('_', ' ')} Specifications
+                            </span>
+                            {type === 'vehicle' && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowAiPanel(!showAiPanel); setAiSuggestion(null); setAiError(null); }}
+                                    className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition"
+                                >
+                                    <Wand2 className="w-3 h-3" />
+                                    AI Assist
+                                </button>
+                            )}
+                        </div>
+
+                        {/* AI Assist Panel */}
+                        {type === 'vehicle' && showAiPanel && (
+                            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 space-y-3">
+                                <div className="flex items-start gap-2">
+                                    <Sparkles className="w-4 h-4 text-violet-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-[11px] font-bold text-violet-900">AI Vehicle Analysis</p>
+                                        <p className="text-[11px] text-violet-700 mt-0.5">Describe the vehicle (brand, model, year, condition, etc.) and AI will suggest the form fields. You can review and edit before applying.</p>
+                                    </div>
+                                </div>
+
+                                <textarea
+                                    rows={3}
+                                    value={aiDescription}
+                                    onChange={e => setAiDescription(e.target.value)}
+                                    placeholder="e.g. 2021 Toyota Land Cruiser VX, white, automatic, diesel, 45,000km, excellent condition, full options, sunroof..."
+                                    className="w-full bg-white border border-violet-200 rounded-lg p-2.5 text-xs resize-none focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                                />
+
+                                {aiError && (
+                                    <p className="text-[11px] text-rose-600 font-medium">{aiError}</p>
+                                )}
+
+                                {!aiSuggestion ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleAiAnalyze}
+                                        disabled={aiLoading || !aiDescription.trim()}
+                                        className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold px-4 py-2 rounded-lg disabled:opacity-50 transition"
+                                    >
+                                        {aiLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                                        {aiLoading ? 'Analyzing...' : 'Analyze with AI'}
+                                    </button>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {/* Confidence */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[11px] text-slate-500">AI Confidence:</span>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${confidenceColor(aiSuggestion.confidence)}`}>
+                                                {Math.round(aiSuggestion.confidence * 100)}%
+                                            </span>
+                                        </div>
+
+                                        {/* Suggested Fields Grid */}
+                                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                                            {[
+                                                { label: 'Brand', value: aiSuggestion.brand },
+                                                { label: 'Model', value: aiSuggestion.model },
+                                                { label: 'Year', value: aiSuggestion.year },
+                                                { label: 'Color', value: aiSuggestion.color },
+                                                { label: 'Body Type', value: aiSuggestion.body_type },
+                                                { label: 'Transmission', value: aiSuggestion.transmission },
+                                                { label: 'Fuel Type', value: aiSuggestion.fuel_type },
+                                                { label: 'Mileage (km)', value: aiSuggestion.mileage },
+                                                { label: 'Condition', value: aiSuggestion.condition },
+                                            ].map(({ label, value }) => value ? (
+                                                <div key={label} className="bg-white border border-violet-100 rounded-lg px-2.5 py-1.5">
+                                                    <span className="text-violet-500 font-bold block text-[10px]">{label}</span>
+                                                    <span className="font-semibold text-slate-900">{String(value)}</span>
+                                                </div>
+                                            ) : null)}
+                                        </div>
+
+                                        {aiSuggestion.title && (
+                                            <div className="bg-white border border-violet-100 rounded-lg px-2.5 py-1.5">
+                                                <span className="text-violet-500 font-bold block text-[10px]">Suggested Title</span>
+                                                <span className="font-semibold text-slate-900 text-xs">{aiSuggestion.title}</span>
+                                            </div>
+                                        )}
+
+                                        {aiSuggestion.missing_fields.length > 0 && (
+                                            <div className="flex items-start gap-1.5 text-[11px] text-amber-700">
+                                                <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                                <span>Missing: {aiSuggestion.missing_fields.join(', ')}</span>
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-2 pt-1">
+                                            <button
+                                                type="button"
+                                                onClick={handleApplyAiSuggestion}
+                                                className="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition"
+                                            >
+                                                <CheckCircle2 className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />
+                                                Apply to Form
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAiSuggestion(null)}
+                                                className="px-4 py-2 rounded-lg text-slate-600 hover:bg-violet-100 font-bold text-xs"
+                                            >
+                                                Re-analyze
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {type === 'vehicle' && (
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                <div>
+                                {/* Brand — Searchable Dropdown */}
+                                <div ref={brandRef} className="relative sm:col-span-1">
                                     <label className="block text-slate-600 font-semibold mb-1">Brand</label>
-                                    <input
-                                        type="text"
-                                        value={attributes.brand || ''}
-                                        onChange={(e) => handleAttrChange('brand', e.target.value)}
-                                        placeholder="e.g. Toyota"
-                                        className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={brandSearch}
+                                            onChange={e => handleBrandInput(e.target.value)}
+                                            onFocus={() => setShowBrandDropdown(true)}
+                                            placeholder="Search or type brand..."
+                                            className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs pr-8"
+                                        />
+                                        <Search className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" />
+                                    </div>
+                                    {showBrandDropdown && filteredBrands.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 max-h-40 overflow-y-auto text-xs">
+                                            {filteredBrands.slice(0, 20).map(brand => (
+                                                <button
+                                                    key={brand.id}
+                                                    type="button"
+                                                    onMouseDown={() => handleSelectBrand(brand)}
+                                                    className="w-full text-left px-3 py-1.5 hover:bg-emerald-50 hover:text-emerald-900 font-medium"
+                                                >
+                                                    {brand.name}
+                                                </button>
+                                            ))}
+                                            {brandSearch && !vehicleBrands.find(b => b.name.toLowerCase() === brandSearch.toLowerCase()) && (
+                                                <div className="px-3 py-1.5 text-slate-400 italic border-t border-slate-100">
+                                                    Using "{brandSearch}" (custom)
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
+
+                                {/* Model — Dependent Dropdown */}
+                                <div>
+                                    <label className="block text-slate-600 font-semibold mb-1">Model</label>
+                                    {selectedBrand && vehicleModels.length > 0 ? (
+                                        <select
+                                            value={attributes.model || ''}
+                                            onChange={e => handleAttrChange('model', e.target.value)}
+                                            className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs"
+                                        >
+                                            <option value="">Select model...</option>
+                                            {vehicleModels.map(m => (
+                                                <option key={m.id} value={m.name}>{m.name}{m.body_type ? ` (${m.body_type})` : ''}</option>
+                                            ))}
+                                            <option value="_other">Other / Not Listed</option>
+                                        </select>
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            value={attributes.model || ''}
+                                            onChange={e => handleAttrChange('model', e.target.value)}
+                                            placeholder="e.g. Land Cruiser"
+                                            className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs"
+                                        />
+                                    )}
+                                    {attributes.model === '_other' && (
+                                        <input
+                                            type="text"
+                                            placeholder="Type model name..."
+                                            onChange={e => handleAttrChange('model', e.target.value)}
+                                            className="w-full mt-1 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs"
+                                        />
+                                    )}
+                                </div>
+
                                 <div>
                                     <label className="block text-slate-600 font-semibold mb-1">Year</label>
                                     <input
@@ -391,6 +699,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                                         <option value="Diesel">Diesel</option>
                                         <option value="Hybrid">Hybrid</option>
                                         <option value="Electric">Electric</option>
+                                        <option value="CNG">CNG</option>
                                     </select>
                                 </div>
                                 <div>
@@ -587,4 +896,3 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
         </div>
     );
 };
-

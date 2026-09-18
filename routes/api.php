@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\BuyerRequirementController;
 use App\Http\Controllers\Api\CrmLeadController;
 use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\InquiryController;
+use App\Http\Controllers\Api\ListingAiController;
 use App\Http\Controllers\Api\ListingController;
 use App\Http\Controllers\Api\MarketplaceController;
 use App\Http\Controllers\Api\MessageController;
@@ -13,7 +14,7 @@ use App\Http\Controllers\Api\PaymentWebhookController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\SubscriptionController;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Api\VehicleCatalogController;
 use Illuminate\Support\Facades\Route;
 
 $healthHandler = function () {
@@ -61,6 +62,10 @@ $registerMarketplaceApiRoutes = function () {
     // Buyer Requirements Board (Public index)
     Route::get('/buyer-requirements', [BuyerRequirementController::class, 'index']);
 
+    // Vehicle Catalog (Public — for listing form dropdowns)
+    Route::get('/vehicle-brands', [VehicleCatalogController::class, 'brands']);
+    Route::get('/vehicle-brands/{brand}/models', [VehicleCatalogController::class, 'models']);
+
     // System-Wide Knowledge-Based AI Assistant
     Route::prefix('ai')->group(function () {
         Route::post('/chat', [\App\Http\Controllers\AiChatController::class, 'chat']);
@@ -83,6 +88,9 @@ $registerMarketplaceApiRoutes = function () {
         Route::match(['put', 'post'], '/listings/{listing}', [ListingController::class, 'update']);
         Route::delete('/listings/{listing}', [ListingController::class, 'destroy']);
         Route::post('/listings/{listing}/status', [ListingController::class, 'changeStatus']);
+
+        // AI-Assisted Vehicle Listing (suggest only — never creates/modifies listings)
+        Route::post('/listings/ai-assist', [ListingAiController::class, 'assistVehicle']);
 
         // Reviews
         Route::post('/listings/{listing}/reviews', [ReviewController::class, 'store']);
@@ -124,8 +132,23 @@ $registerMarketplaceApiRoutes = function () {
             Route::get('/plans', [AdminController::class, 'plans']);
             Route::match(['put', 'post'], '/plans/{plan}', [AdminController::class, 'updatePlan']);
             Route::get('/transactions', [AdminController::class, 'transactions']);
+
+            // Legacy single-provider endpoint (kept for backward compat)
             Route::get('/gateway-settings', [AdminController::class, 'gatewaySettings']);
             Route::post('/gateway-settings', [AdminController::class, 'updateGatewaySettings']);
+
+            // Multi-Provider Payment Gateways
+            Route::get('/gateways', [AdminController::class, 'gateways']);
+            Route::match(['put', 'post'], '/gateways/{gateway}', [AdminController::class, 'updateGateway']);
+            Route::post('/gateways/{gateway}/toggle', [AdminController::class, 'toggleGateway']);
+
+            // Vehicle Brand/Model Catalog
+            Route::get('/vehicle-brands', [VehicleCatalogController::class, 'adminBrands']);
+            Route::post('/vehicle-brands', [VehicleCatalogController::class, 'storeBrand']);
+            Route::match(['put', 'post'], '/vehicle-brands/{brand}', [VehicleCatalogController::class, 'updateBrand']);
+            Route::get('/vehicle-brands/{brand}/models', [VehicleCatalogController::class, 'adminModels']);
+            Route::post('/vehicle-brands/{brand}/models', [VehicleCatalogController::class, 'storeModel']);
+            Route::match(['put', 'post'], '/vehicle-models/{model}', [VehicleCatalogController::class, 'updateModel']);
         });
     });
 };

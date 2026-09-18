@@ -314,7 +314,6 @@ export const api = {
         return res.data;
     },
 
-    // System-Wide Knowledge-Based AI Assistant
     async chatWithAi(message: string, activeTab?: string, pageContext?: string) {
         const res = await apiClient.post('/ai/chat', {
             message,
@@ -335,5 +334,70 @@ export const api = {
         const res = await apiClient.post('/ai/clear');
         return res.data;
     },
+
+    // Vehicle Catalog (Brand/Model Dropdowns)
+    async getVehicleBrands() {
+        const res = await apiClient.get('/vehicle-brands');
+        return res.data.data;
+    },
+
+    async getVehicleModels(brandId: number) {
+        const res = await apiClient.get(`/vehicle-brands/${brandId}/models`);
+        return res.data.data;
+    },
+
+    // Admin: Vehicle Catalog Management
+    async getAdminVehicleBrands() {
+        const res = await apiClient.get('/admin/vehicle-brands');
+        return res.data.data;
+    },
+
+    async createVehicleBrand(data: { name: string; is_active?: boolean; sort_order?: number }) {
+        const res = await apiClient.post('/admin/vehicle-brands', data);
+        return res.data;
+    },
+
+    async updateVehicleBrand(brandId: number, data: { name?: string; is_active?: boolean; sort_order?: number }) {
+        const res = await apiClient.post(`/admin/vehicle-brands/${brandId}`, data);
+        return res.data;
+    },
+
+    async getAdminVehicleModels(brandId: number) {
+        const res = await apiClient.get(`/admin/vehicle-brands/${brandId}/models`);
+        return res.data.data;
+    },
+
+    async createVehicleModel(brandId: number, data: { name: string; body_type?: string; is_active?: boolean }) {
+        const res = await apiClient.post(`/admin/vehicle-brands/${brandId}/models`, data);
+        return res.data;
+    },
+
+    async updateVehicleModel(modelId: number, data: { name?: string; body_type?: string; is_active?: boolean }) {
+        const res = await apiClient.post(`/admin/vehicle-models/${modelId}`, data);
+        return res.data;
+    },
+
+    // Admin: Multi-Provider Payment Gateways
+    async getPaymentGateways() {
+        const res = await apiClient.get('/admin/gateways');
+        return res.data.data;
+    },
+
+    async updatePaymentGateway(gatewayId: number, data: Record<string, any>) {
+        const res = await apiClient.post(`/admin/gateways/${gatewayId}`, data);
+        return res.data;
+    },
+
+    async togglePaymentGateway(gatewayId: number) {
+        const res = await apiClient.post(`/admin/gateways/${gatewayId}/toggle`);
+        return res.data;
+    },
+
+    // AI-Assisted Vehicle Listing (returns suggestions only)
+    async aiAssistVehicle(data: { description: string; image_urls?: string[] }) {
+        const res = await apiClient.post('/listings/ai-assist', data);
+        return res.data.data;
+    },
 };
+
 

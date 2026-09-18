@@ -7,6 +7,7 @@ use App\Http\Requests\RejectListingRequest;
 use App\Models\Category;
 use App\Models\Listing;
 use App\Models\Payment;
+use App\Models\PaymentGateway;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
@@ -165,7 +166,6 @@ class AdminController extends Controller implements HasMiddleware
             'rejection_reason' => null,
         ]);
 
-        // Notify user
         try {
             $listing->user?->notify(new ListingStatusUpdatedNotification(
                 $listing,
@@ -191,7 +191,6 @@ class AdminController extends Controller implements HasMiddleware
             'rejection_reason' => $validated['reason'],
         ]);
 
-        // Notify user
         try {
             $listing->user?->notify(new ListingStatusUpdatedNotification(
                 $listing,
@@ -322,13 +321,121 @@ class AdminController extends Controller implements HasMiddleware
     }
 
     // ----------------------------------------------------
-    // Payment Gateway Settings (Chapa)
+    // Payment Gateway Management (Multi-Provider)
     // ----------------------------------------------------
 
+    /**
+     * List all payment gateways with masked credentials
+     */
+    public function gateways(): JsonResponse
+    {
+        $gateways = PaymentGateway::orderBy('code')->get()->map(function ($gw) {
+            return $this->formatGatewayForResponse($gw);
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $gateways,
+        ]);
+    }
+
+    /**
+     * Update a payment gateway's settings (credentials stored as JSON, never returned raw)
+     */
+    public function updateGateway(Request $request, PaymentGateway $gateway): JsonResponse
+    {
+        $validated = $request->validate([
+            'is_active'       => 'nullable|boolean',
+            'is_test_mode'    => 'nullable|boolean',
+            'api_key'         => 'nullable|string|max:500',
+            'secret_key'      => 'nullable|string|max:500',
+            'public_key'      => 'nullable|string|max:500',
+            'merchant_id'     => 'nullable|string|max:200',
+            'account_number'  => 'nullable|string|max:200',
+            'webhook_url'     => 'nullable|url|max:500',
+            'webhook_secret'  => 'nullable|string|max:500',
+        ]);
+
+        // Merge credentials into the existing JSON blob (don't expose old values)
+        $existingCreds = $gateway->credentials ?? [];
+
+        $credentialFields = ['api_key', 'secret_key', 'public_key', 'merchant_id', 'account_number', 'webhook_url', 'webhook_secret'];
+        $updatedCreds = $existingCreds;
+
+        foreach ($credentialFields as $field) {
+            if (array_key_exists($field, $validated) && $validated[$field] !== null && $validated[$field] !== '') {
+                $updatedCreds[$field] = $validated[$field];
+            }
+        }
+
+        $updates = ['credentials' => $updatedCreds];
+
+        if (array_key_exists('is_active', $validated) && $validated['is_active'] !== null) {
+            $updates['is_active'] = $validated['is_active'];
+        }
+        if (array_key_exists('is_test_mode', $validated) && $validated['is_test_mode'] !== null) {
+            $updates['is_test_mode'] = $validated['is_test_mode'];
+        }
+
+        $gateway->update($updates);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "{$gateway->name} settings updated successfully.",
+            'data'    => $this->formatGatewayForResponse($gateway->fresh()),
+        ]);
+    }
+
+    /**
+     * Toggle a payment gateway enabled/disabled
+     */
+    public function toggleGateway(PaymentGateway $gateway): JsonResponse
+    {
+        $gateway->update(['is_active' => !$gateway->is_active]);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => $gateway->is_active ? "{$gateway->name} enabled." : "{$gateway->name} disabled.",
+            'data'    => $this->formatGatewayForResponse($gateway->fresh()),
+        ]);
+    }
+
+    /**
+     * Format gateway data for API response — mask all credential values
+     */
+    private function formatGatewayForResponse(PaymentGateway $gw): array
+    {
+        $creds = $gw->credentials ?? [];
+        $maskedCreds = [];
+
+        foreach ($creds as $key => $value) {
+            if ($key === 'webhook_url') {
+                $maskedCreds[$key] = $value; // URL is safe to expose
+            } else {
+                $maskedCreds[$key] = !empty($value) ? '••••••' . substr($value, -4) : null;
+            }
+        }
+
+        return [
+            'id'            => $gw->id,
+            'code'          => $gw->code,
+            'name'          => $gw->name,
+            'is_active'     => $gw->is_active,
+            'is_test_mode'  => $gw->is_test_mode,
+            'credentials'   => $maskedCreds,
+            'has_api_key'   => !empty($creds['api_key'] ?? null),
+            'has_secret'    => !empty($creds['secret_key'] ?? null),
+            'has_public_key'=> !empty($creds['public_key'] ?? null),
+            'webhook_url'   => $creds['webhook_url'] ?? null,
+            'updated_at'    => $gw->updated_at?->toIso8601String(),
+        ];
+    }
+
+    // Keep legacy gateway settings endpoint for backward compatibility
     public function gatewaySettings(): JsonResponse
     {
         $enabled = Setting::get('chapa_enabled', 'true') === 'true';
-        $mode = Setting::get('chapa_mode', 'test'); // test or live
+        $mode = Setting::get('chapa_mode', 'test');
         $publicKey = Setting::get('chapa_public_key', env('CHAPA_PUBLIC_KEY', 'CHAPUBK_TEST-xxxx'));
         $hasSecret = !empty(Setting::get('chapa_secret_key', env('CHAPA_SECRET_KEY')));
 
@@ -374,3 +481,4 @@ class AdminController extends Controller implements HasMiddleware
         ]);
     }
 }
+

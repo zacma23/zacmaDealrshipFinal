@@ -10,6 +10,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             SmmMarketplaceSeeder::class,
+            VehicleCatalogSeeder::class,
         ]);
+
     }
 }

@@ -3,11 +3,14 @@ import { api } from '../services/api';
 import { 
     ShieldAlert, Users, Layers, Clock, DollarSign, 
     CheckCircle2, XCircle, Settings, Tag, Sliders, 
-    CreditCard, AlertTriangle, Eye, RefreshCw
+    CreditCard, AlertTriangle, Eye, RefreshCw, Car,
+    ToggleLeft, ToggleRight, Plus, ChevronDown, ChevronRight, Shield
 } from 'lucide-react';
 
+type AdminSubTab = 'overview' | 'approvals' | 'users' | 'categories' | 'plans' | 'transactions' | 'gateways' | 'vehicle-catalog';
+
 export const AdminDashboardView: React.FC = () => {
-    const [subTab, setSubTab] = useState<'overview' | 'approvals' | 'users' | 'categories' | 'plans' | 'transactions' | 'gateway'>('overview');
+    const [subTab, setSubTab] = useState<AdminSubTab>('overview');
 
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [pendingListings, setPendingListings] = useState<any[]>([]);
@@ -15,7 +18,8 @@ export const AdminDashboardView: React.FC = () => {
     const [categoriesList, setCategoriesList] = useState<any[]>([]);
     const [plansList, setPlansList] = useState<any[]>([]);
     const [transactionsList, setTransactionsList] = useState<any[]>([]);
-    const [gatewayData, setGatewayData] = useState<any>(null);
+    const [gatewaysList, setGatewaysList] = useState<any[]>([]);
+    const [vehicleBrands, setVehicleBrands] = useState<any[]>([]);
 
     const [loading, setLoading] = useState(true);
 
@@ -27,6 +31,18 @@ export const AdminDashboardView: React.FC = () => {
     // Category modal state
     const [newCategoryName, setNewCategoryName] = useState('');
     const [newCategoryType, setNewCategoryType] = useState('vehicle');
+
+    // Gateway edit state
+    const [editingGatewayId, setEditingGatewayId] = useState<number | null>(null);
+    const [gatewayFormData, setGatewayFormData] = useState<Record<string, any>>({});
+    const [gatewaySaving, setGatewaySaving] = useState(false);
+
+    // Vehicle catalog state
+    const [expandedBrandId, setExpandedBrandId] = useState<number | null>(null);
+    const [brandModels, setBrandModels] = useState<Record<number, any[]>>({});
+    const [newBrandName, setNewBrandName] = useState('');
+    const [newModelForms, setNewModelForms] = useState<Record<number, { name: string; body_type: string }>>({});
+    const [catalogLoading, setCatalogLoading] = useState(false);
 
     const loadDashboard = async () => {
         setLoading(true);
@@ -68,18 +84,44 @@ export const AdminDashboardView: React.FC = () => {
         setTransactionsList(data.data || []);
     };
 
-    const loadGateway = async () => {
-        const data = await api.getGatewaySettings();
-        setGatewayData(data);
+    const loadGateways = async () => {
+        try {
+            const data = await api.getPaymentGateways();
+            setGatewaysList(data || []);
+        } catch (err) {
+            console.error('Failed to load gateways', err);
+        }
     };
 
-    const handleTabSwitch = (tab: any) => {
+    const loadVehicleBrands = async () => {
+        setCatalogLoading(true);
+        try {
+            const data = await api.getAdminVehicleBrands();
+            setVehicleBrands(data || []);
+        } catch (err) {
+            console.error('Failed to load vehicle brands', err);
+        } finally {
+            setCatalogLoading(false);
+        }
+    };
+
+    const loadBrandModels = async (brandId: number) => {
+        try {
+            const data = await api.getAdminVehicleModels(brandId);
+            setBrandModels(prev => ({ ...prev, [brandId]: data || [] }));
+        } catch (err) {
+            console.error('Failed to load models', err);
+        }
+    };
+
+    const handleTabSwitch = (tab: AdminSubTab) => {
         setSubTab(tab);
         if (tab === 'users') loadUsers();
         if (tab === 'categories') loadCategories();
         if (tab === 'plans') loadPlans();
         if (tab === 'transactions') loadTransactions();
-        if (tab === 'gateway') loadGateway();
+        if (tab === 'gateways') loadGateways();
+        if (tab === 'vehicle-catalog') loadVehicleBrands();
         if (tab === 'approvals' || tab === 'overview') loadDashboard();
     };
 
@@ -140,22 +182,106 @@ export const AdminDashboardView: React.FC = () => {
         }
     };
 
-    const handleUpdateGateway = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!gatewayData) return;
+    // Gateway handlers
+    const handleToggleGateway = async (gatewayId: number) => {
         try {
-            await api.updateGatewaySettings({
-                enabled: gatewayData.enabled,
-                mode: gatewayData.mode,
-                public_key: gatewayData.public_key,
-            });
-            alert('Chapa Gateway settings saved successfully.');
+            const data = await api.togglePaymentGateway(gatewayId);
+            setGatewaysList(prev => prev.map(g => g.id === gatewayId ? data.data : g));
         } catch (err) {
-            alert('Failed to update gateway settings.');
+            alert('Failed to toggle gateway.');
+        }
+    };
+
+    const handleEditGateway = (gw: any) => {
+        setEditingGatewayId(gw.id);
+        setGatewayFormData({
+            is_test_mode: gw.is_test_mode,
+            api_key: '',
+            secret_key: '',
+            public_key: '',
+            merchant_id: '',
+            webhook_url: gw.webhook_url || '',
+        });
+    };
+
+    const handleSaveGateway = async (gatewayId: number) => {
+        setGatewaySaving(true);
+        try {
+            const data = await api.updatePaymentGateway(gatewayId, gatewayFormData);
+            setGatewaysList(prev => prev.map(g => g.id === gatewayId ? data.data : g));
+            setEditingGatewayId(null);
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to update gateway settings.');
+        } finally {
+            setGatewaySaving(false);
+        }
+    };
+
+    // Vehicle catalog handlers
+    const handleCreateBrand = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newBrandName.trim()) return;
+        try {
+            await api.createVehicleBrand({ name: newBrandName });
+            setNewBrandName('');
+            loadVehicleBrands();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to create brand.');
+        }
+    };
+
+    const handleToggleBrand = async (brandId: number, isActive: boolean) => {
+        try {
+            await api.updateVehicleBrand(brandId, { is_active: !isActive });
+            loadVehicleBrands();
+        } catch (err) {
+            alert('Failed to update brand.');
+        }
+    };
+
+    const handleExpandBrand = async (brandId: number) => {
+        if (expandedBrandId === brandId) {
+            setExpandedBrandId(null);
+            return;
+        }
+        setExpandedBrandId(brandId);
+        if (!brandModels[brandId]) {
+            await loadBrandModels(brandId);
+        }
+    };
+
+    const handleCreateModel = async (brandId: number) => {
+        const form = newModelForms[brandId];
+        if (!form?.name?.trim()) return;
+        try {
+            await api.createVehicleModel(brandId, { name: form.name, body_type: form.body_type });
+            setNewModelForms(prev => ({ ...prev, [brandId]: { name: '', body_type: '' } }));
+            await loadBrandModels(brandId);
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to add model.');
+        }
+    };
+
+    const handleToggleModel = async (modelId: number, brandId: number, isActive: boolean) => {
+        try {
+            await api.updateVehicleModel(modelId, { is_active: !isActive });
+            await loadBrandModels(brandId);
+        } catch (err) {
+            alert('Failed to update model.');
         }
     };
 
     const metrics = dashboardData?.metrics;
+
+    // Provider display info
+    const gatewayInfo: Record<string, { label: string; description: string; color: string }> = {
+        chapa:     { label: 'Chapa', description: 'Ethiopian multi-channel payments (Telebirr, CBE, Cards)', color: 'emerald' },
+        telebirr:  { label: 'Telebirr', description: "Ethio Telecom's mobile money wallet", color: 'blue' },
+        cbe:       { label: 'CBE Birr', description: 'Commercial Bank of Ethiopia mobile banking', color: 'indigo' },
+        ebirr:     { label: 'eBirr', description: 'eBirr mobile wallet payments', color: 'violet' },
+        santimpay: { label: 'SantimPay', description: 'Ethiopian payment gateway aggregator', color: 'amber' },
+        paypal:    { label: 'PayPal', description: 'International PayPal payments (USD)', color: 'sky' },
+    };
 
     return (
         <div className="space-y-6 pb-20">
@@ -167,7 +293,7 @@ export const AdminDashboardView: React.FC = () => {
                         <span>Super Admin Command Center</span>
                     </h1>
                     <p className="text-xs text-slate-500">
-                        Platform listings moderation, Ethiopian payment gateway configuration, users & categories management.
+                        Platform listings moderation, payment gateways, vehicle catalog, users & categories.
                     </p>
                 </div>
                 <button
@@ -188,11 +314,12 @@ export const AdminDashboardView: React.FC = () => {
                     { key: 'categories', label: 'Categories' },
                     { key: 'plans', label: 'Subscription Plans' },
                     { key: 'transactions', label: 'All Payments' },
-                    { key: 'gateway', label: 'Chapa Gateway' },
+                    { key: 'gateways', label: 'Payment Gateways' },
+                    { key: 'vehicle-catalog', label: 'Vehicle Catalog' },
                 ].map(t => (
                     <button
                         key={t.key}
-                        onClick={() => handleTabSwitch(t.key)}
+                        onClick={() => handleTabSwitch(t.key as AdminSubTab)}
                         className={`px-3 py-2 rounded-xl transition whitespace-nowrap ${
                             subTab === t.key
                                 ? 'bg-slate-900 text-white'
@@ -485,7 +612,6 @@ export const AdminDashboardView: React.FC = () => {
             {/* TAB: CATEGORIES */}
             {subTab === 'categories' && (
                 <div className="space-y-6">
-                    {/* Add Category Form */}
                     <form onSubmit={handleCreateCategory} className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-end gap-3 text-xs shadow-xs">
                         <div className="flex-1 w-full">
                             <label className="block font-bold text-slate-700 mb-1">New Category Name</label>
@@ -518,7 +644,6 @@ export const AdminDashboardView: React.FC = () => {
                         </button>
                     </form>
 
-                    {/* Category List */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                         <div className="p-4 border-b border-slate-100">
                             <h3 className="font-extrabold text-slate-900 text-sm">Flat Category Catalog</h3>
@@ -636,68 +761,295 @@ export const AdminDashboardView: React.FC = () => {
                 </div>
             )}
 
-            {/* TAB: GATEWAY SETTINGS */}
-            {subTab === 'gateway' && (
-                <div className="max-w-2xl bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-5">
-                    <div>
-                        <h3 className="font-extrabold text-slate-900 text-base">Chapa Payment Gateway Settings</h3>
-                        <p className="text-xs text-slate-500">Configure Chapa API credentials and test/live modes for Ethiopia payments.</p>
+            {/* TAB: PAYMENT GATEWAYS */}
+            {subTab === 'gateways' && (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="font-extrabold text-slate-900 text-base">Payment Gateway Configuration</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Configure Ethiopian and international payment providers. Credentials are stored securely and never exposed.</p>
+                        </div>
+                        <button onClick={loadGateways} className="p-2 border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50">
+                            <RefreshCw className="w-4 h-4" />
+                        </button>
                     </div>
 
-                    {gatewayData && (
-                        <form onSubmit={handleUpdateGateway} className="space-y-4 text-xs">
-                            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                                <div>
-                                    <span className="font-bold text-slate-900 block">Enable Chapa Gateway</span>
-                                    <span className="text-[11px] text-slate-500">Allow users to pay via Telebirr, CBE Birr, and cards</span>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {gatewaysList.map(gw => {
+                            const info = gatewayInfo[gw.code] || { label: gw.name, description: 'Payment provider', color: 'slate' };
+                            const isEditing = editingGatewayId === gw.id;
+
+                            return (
+                                <div key={gw.id} className={`bg-white rounded-2xl border shadow-xs overflow-hidden ${gw.is_active ? 'border-slate-200' : 'border-slate-100 opacity-70'}`}>
+                                    <div className="p-4 flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                                            <div className={`w-10 h-10 rounded-xl bg-${info.color}-100 text-${info.color}-700 flex items-center justify-center shrink-0`}>
+                                                <CreditCard className="w-5 h-5" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <h4 className="font-extrabold text-slate-900 text-sm">{info.label}</h4>
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${gw.is_test_mode ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                                                        {gw.is_test_mode ? 'SANDBOX' : 'LIVE'}
+                                                    </span>
+                                                    {gw.is_active && (
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                                            Active
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[11px] text-slate-500 mt-0.5">{info.description}</p>
+                                                <div className="flex gap-3 mt-1.5 text-[11px] text-slate-400">
+                                                    <span>API Key: {gw.has_api_key ? '✓ Set' : '⚠ Not set'}</span>
+                                                    <span>Secret: {gw.has_secret ? '✓ Set' : '⚠ Not set'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <button
+                                                onClick={() => handleToggleGateway(gw.id)}
+                                                className={`p-1.5 rounded-lg text-xs font-bold transition ${gw.is_active ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100' : 'text-slate-400 bg-slate-50 hover:bg-slate-100'}`}
+                                                title={gw.is_active ? 'Disable gateway' : 'Enable gateway'}
+                                            >
+                                                {gw.is_active ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
+                                            </button>
+                                            <button
+                                                onClick={() => isEditing ? setEditingGatewayId(null) : handleEditGateway(gw)}
+                                                className="p-1.5 rounded-lg text-slate-500 bg-slate-50 hover:bg-slate-100 transition"
+                                            >
+                                                <Settings className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Edit Form */}
+                                    {isEditing && (
+                                        <div className="border-t border-slate-100 p-4 bg-slate-50 space-y-3 text-xs">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={gatewayFormData.is_test_mode}
+                                                        onChange={e => setGatewayFormData(p => ({ ...p, is_test_mode: e.target.checked }))}
+                                                        className="w-4 h-4 rounded text-emerald-600"
+                                                    />
+                                                    <span className="font-semibold text-slate-700">Sandbox / Test Mode</span>
+                                                </label>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="block font-bold text-slate-600 mb-1">API Key</label>
+                                                    <input
+                                                        type="password"
+                                                        placeholder="Enter new API key (leave blank to keep)"
+                                                        value={gatewayFormData.api_key}
+                                                        onChange={e => setGatewayFormData(p => ({ ...p, api_key: e.target.value }))}
+                                                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block font-bold text-slate-600 mb-1">Secret Key</label>
+                                                    <input
+                                                        type="password"
+                                                        placeholder="Enter new secret key (leave blank to keep)"
+                                                        value={gatewayFormData.secret_key}
+                                                        onChange={e => setGatewayFormData(p => ({ ...p, secret_key: e.target.value }))}
+                                                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block font-bold text-slate-600 mb-1">Public Key (if applicable)</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Public-facing key"
+                                                        value={gatewayFormData.public_key}
+                                                        onChange={e => setGatewayFormData(p => ({ ...p, public_key: e.target.value }))}
+                                                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block font-bold text-slate-600 mb-1">Merchant / Account ID</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Merchant ID or account number"
+                                                        value={gatewayFormData.merchant_id}
+                                                        onChange={e => setGatewayFormData(p => ({ ...p, merchant_id: e.target.value }))}
+                                                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs"
+                                                    />
+                                                </div>
+                                                <div className="sm:col-span-2">
+                                                    <label className="block font-bold text-slate-600 mb-1">Webhook / Callback URL</label>
+                                                    <input
+                                                        type="url"
+                                                        placeholder="https://your-domain.com/api/webhooks/payment/..."
+                                                        value={gatewayFormData.webhook_url}
+                                                        onChange={e => setGatewayFormData(p => ({ ...p, webhook_url: e.target.value }))}
+                                                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-2 pt-1">
+                                                <button
+                                                    onClick={() => setEditingGatewayId(null)}
+                                                    className="px-4 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 font-bold text-xs"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={() => handleSaveGateway(gw.id)}
+                                                    disabled={gatewaySaving}
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-1.5 rounded-lg text-xs disabled:opacity-50"
+                                                >
+                                                    {gatewaySaving ? 'Saving...' : 'Save Settings'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Webhook info */}
+                                    {!isEditing && gw.webhook_url && (
+                                        <div className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400 font-mono truncate">
+                                            Webhook: {gw.webhook_url}
+                                        </div>
+                                    )}
                                 </div>
-                                <input
-                                    type="checkbox"
-                                    checked={gatewayData.enabled}
-                                    onChange={(e) => setGatewayData({ ...gatewayData, enabled: e.target.checked })}
-                                    className="w-5 h-5 text-emerald-600 rounded"
-                                />
-                            </div>
+                            );
+                        })}
 
-                            <div>
-                                <label className="block text-slate-700 font-bold mb-1">Environment Mode</label>
-                                <select
-                                    value={gatewayData.mode}
-                                    onChange={(e) => setGatewayData({ ...gatewayData, mode: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold"
-                                >
-                                    <option value="test">Sandbox / Test Mode</option>
-                                    <option value="live">Live Production</option>
-                                </select>
+                        {gatewaysList.length === 0 && (
+                            <div className="col-span-2 bg-white p-12 rounded-2xl border border-slate-200 text-center text-xs text-slate-400">
+                                No payment gateways configured. They are seeded automatically — try refreshing.
                             </div>
+                        )}
+                    </div>
 
-                            <div>
-                                <label className="block text-slate-700 font-bold mb-1">Chapa Public Key</label>
-                                <input
-                                    type="text"
-                                    value={gatewayData.public_key || ''}
-                                    onChange={(e) => setGatewayData({ ...gatewayData, public_key: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
-                                />
-                            </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-800 flex items-start gap-3">
+                        <Shield className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                        <div>
+                            <p className="font-bold">Security Note</p>
+                            <p className="mt-0.5 font-normal">API keys and secret keys are stored encrypted in the database and masked in this UI. They are never transmitted back to the browser in plaintext.</p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
-                            <div>
-                                <label className="block text-slate-700 font-bold mb-1">Chapa Secret Key (Stored Encrypted)</label>
-                                <input
-                                    type="password"
-                                    placeholder={gatewayData.has_secret_key ? '••••••••••••••••' : 'Enter secret key'}
-                                    onChange={(e) => setGatewayData({ ...gatewayData, secret_key: e.target.value })}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono"
-                                />
-                            </div>
+            {/* TAB: VEHICLE CATALOG */}
+            {subTab === 'vehicle-catalog' && (
+                <div className="space-y-5">
+                    <div>
+                        <h3 className="font-extrabold text-slate-900 text-base">Vehicle Brand & Model Catalog</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">Manage the searchable brand/model dropdowns used in the vehicle listing form.</p>
+                    </div>
 
-                            <button
-                                type="submit"
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2.5 rounded-xl transition shadow-sm"
-                            >
-                                Save Gateway Settings
-                            </button>
-                        </form>
+                    {/* Add Brand Form */}
+                    <form onSubmit={handleCreateBrand} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex gap-3 items-end">
+                        <div className="flex-1">
+                            <label className="block text-xs font-bold text-slate-700 mb-1">New Brand Name</label>
+                            <input
+                                type="text"
+                                required
+                                value={newBrandName}
+                                onChange={e => setNewBrandName(e.target.value)}
+                                placeholder="e.g. Haval"
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs"
+                            />
+                        </div>
+                        <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs shrink-0">
+                            <Plus className="w-3.5 h-3.5 inline -mt-0.5 mr-1" />
+                            Add Brand
+                        </button>
+                    </form>
+
+                    {/* Brand List */}
+                    {catalogLoading ? (
+                        <div className="text-center py-8 text-xs text-slate-400">Loading vehicle catalog...</div>
+                    ) : (
+                        <div className="space-y-2">
+                            {vehicleBrands.map(brand => (
+                                <div key={brand.id} className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                                    {/* Brand Row */}
+                                    <div className="flex items-center gap-3 p-4">
+                                        <button
+                                            onClick={() => handleExpandBrand(brand.id)}
+                                            className="flex items-center gap-2 flex-1 text-left"
+                                        >
+                                            <div className="w-7 h-7 bg-slate-100 rounded-lg flex items-center justify-center">
+                                                <Car className="w-3.5 h-3.5 text-slate-500" />
+                                            </div>
+                                            <span className="font-bold text-slate-900 text-sm">{brand.name}</span>
+                                            <span className="text-[11px] text-slate-400">({brand.models_count ?? '?'} models)</span>
+                                            {expandedBrandId === brand.id
+                                                ? <ChevronDown className="w-4 h-4 text-slate-400 ml-auto" />
+                                                : <ChevronRight className="w-4 h-4 text-slate-400 ml-auto" />
+                                            }
+                                        </button>
+                                        <button
+                                            onClick={() => handleToggleBrand(brand.id, brand.is_active)}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${brand.is_active ? 'bg-emerald-100 text-emerald-700 hover:bg-rose-100 hover:text-rose-700' : 'bg-rose-100 text-rose-700 hover:bg-emerald-100 hover:text-emerald-700'}`}
+                                        >
+                                            {brand.is_active ? 'Active' : 'Inactive'}
+                                        </button>
+                                    </div>
+
+                                    {/* Models Panel */}
+                                    {expandedBrandId === brand.id && (
+                                        <div className="border-t border-slate-100 bg-slate-50/50">
+                                            {/* Model List */}
+                                            <div className="divide-y divide-slate-100">
+                                                {(brandModels[brand.id] || []).map(model => (
+                                                    <div key={model.id} className="flex items-center justify-between px-6 py-2.5 text-xs">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="font-semibold text-slate-800">{model.name}</span>
+                                                            {model.body_type && (
+                                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
+                                                                    {model.body_type}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleToggleModel(model.id, brand.id, model.is_active)}
+                                                            className={`text-[10px] font-bold px-2 py-0.5 rounded ${model.is_active ? 'text-emerald-700 bg-emerald-50 hover:bg-rose-50 hover:text-rose-700' : 'text-rose-700 bg-rose-50 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                                                        >
+                                                            {model.is_active ? 'Active' : 'Inactive'}
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                                {(brandModels[brand.id] || []).length === 0 && (
+                                                    <div className="px-6 py-3 text-xs text-slate-400">No models yet. Add one below.</div>
+                                                )}
+                                            </div>
+
+                                            {/* Add Model Form */}
+                                            <div className="border-t border-slate-200 p-4 flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Model name e.g. Corolla"
+                                                    value={newModelForms[brand.id]?.name || ''}
+                                                    onChange={e => setNewModelForms(prev => ({ ...prev, [brand.id]: { ...prev[brand.id], name: e.target.value } }))}
+                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs"
+                                                />
+                                                <select
+                                                    value={newModelForms[brand.id]?.body_type || ''}
+                                                    onChange={e => setNewModelForms(prev => ({ ...prev, [brand.id]: { ...prev[brand.id], body_type: e.target.value } }))}
+                                                    className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                                                >
+                                                    <option value="">Body type</option>
+                                                    {['Sedan', 'SUV', 'Pickup', 'Hatchback', 'Van', 'Minivan', 'Coupe', 'Wagon', 'Truck', 'Bus', 'Convertible'].map(bt => (
+                                                        <option key={bt} value={bt}>{bt}</option>
+                                                    ))}
+                                                </select>
+                                                <button
+                                                    onClick={() => handleCreateModel(brand.id)}
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs"
+                                                >
+                                                    + Add
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
             )}
@@ -753,4 +1105,3 @@ export const AdminDashboardView: React.FC = () => {
         </div>
     );
 };
-
