@@ -5,13 +5,14 @@
   "outputDirectory": "public",
   "functions": {
     "api/index.php": {
-      "runtime": "vercel-php@0.7.3"
+      "runtime": "vercel-php@0.7.3",
+      "memory": 1024,
+      "maxDuration": 30
     }
   },
   "routes": [
     {
-      "src": "/(css|js|images|fonts|build|favicon.ico|robots.txt)/(.*)",
-      "dest": "/public/$1/$2"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",

@@ -14,25 +14,29 @@ class TenantResolverMiddleware
         $tenant = null;
         $host = $request->getHost();
 
-        // 1. Check custom domain or subdomain
-        // e.g. dealer1.zacmaa.net or customdomain.com
-        $tenant = Organization::where('custom_domain', $host)
-            ->orWhere('subdomain', $this->extractSubdomain($host))
-            ->first();
+        try {
+            // 1. Check custom domain or subdomain
+            // e.g. dealer1.zacmaa.net or customdomain.com
+            $tenant = Organization::where('custom_domain', $host)
+                ->orWhere('subdomain', $this->extractSubdomain($host))
+                ->first();
 
-        // 2. Check header X-Tenant-ID (for APIs)
-        if (!$tenant && $request->hasHeader('X-Tenant-ID')) {
-            $tenant = Organization::find($request->header('X-Tenant-ID'));
-        }
-
-        // 3. Check session or authenticated user's organization
-        if (!$tenant) {
-            $sessionOrgId = session('active_organization_id');
-            if ($sessionOrgId) {
-                $tenant = Organization::find($sessionOrgId);
-            } elseif ($request->user() && $request->user()->organization_id) {
-                $tenant = $request->user()->organization;
+            // 2. Check header X-Tenant-ID (for APIs)
+            if (!$tenant && $request->hasHeader('X-Tenant-ID')) {
+                $tenant = Organization::find($request->header('X-Tenant-ID'));
             }
+
+            // 3. Check session or authenticated user's organization
+            if (!$tenant) {
+                $sessionOrgId = session('active_organization_id');
+                if ($sessionOrgId) {
+                    $tenant = Organization::find($sessionOrgId);
+                } elseif ($request->user() && $request->user()->organization_id) {
+                    $tenant = $request->user()->organization;
+                }
+            }
+        } catch (\Throwable $e) {
+            $tenant = null;
         }
 
         if ($tenant) {

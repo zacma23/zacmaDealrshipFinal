@@ -110,7 +110,7 @@ class MvpMarketplaceSeeder extends Seeder
         $abebe = User::firstOrCreate(['email' => 'abebe@example.com'], [
             'name' => 'Abebe Bikila',
             'username' => 'abebe-bikila',
-            'phone' => '+251922334455',
+            'phone' => '+251922334456',
             'password' => Hash::make('password'),
             'role' => User::ROLE_USER,
             'is_active' => true,

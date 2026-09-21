@@ -67,6 +67,15 @@ return new class extends Migration
 
                 $table->index(['type', 'is_active']);
             });
+        } else {
+            Schema::table('categories', function (Blueprint $table) {
+                if (!Schema::hasColumn('categories', 'type')) {
+                    $table->string('type')->nullable()->after('slug');
+                }
+                if (!Schema::hasColumn('categories', 'icon')) {
+                    $table->string('icon')->nullable()->after('type');
+                }
+            });
         }
 
         // 4. Subscription Plans (3 fixed plans: Basic, Premium, Pro)
@@ -83,6 +92,12 @@ return new class extends Migration
                 $table->boolean('is_active')->default(true);
                 $table->timestamps();
             });
+        } else {
+            Schema::table('subscription_plans', function (Blueprint $table) {
+                if (!Schema::hasColumn('subscription_plans', 'billing_period')) {
+                    $table->string('billing_period')->default('monthly')->after('listing_limit');
+                }
+            });
         }
 
         // 5. Subscriptions
@@ -98,6 +113,21 @@ return new class extends Migration
                 $table->timestamps();
 
                 $table->index(['user_id', 'status']);
+            });
+        } else {
+            Schema::table('subscriptions', function (Blueprint $table) {
+                if (!Schema::hasColumn('subscriptions', 'plan_id')) {
+                    $table->foreignId('plan_id')->nullable()->after('id')->constrained('subscription_plans')->nullOnDelete();
+                }
+                if (!Schema::hasColumn('subscriptions', 'user_id')) {
+                    $table->foreignId('user_id')->nullable()->after('id')->constrained('users')->cascadeOnDelete();
+                }
+                if (!Schema::hasColumn('subscriptions', 'starts_at')) {
+                    $table->timestamp('starts_at')->nullable()->after('status');
+                }
+                if (!Schema::hasColumn('subscriptions', 'ends_at')) {
+                    $table->timestamp('ends_at')->nullable()->after('starts_at');
+                }
             });
         }
 
@@ -132,6 +162,27 @@ return new class extends Migration
                 $table->index(['city', 'status']);
                 $table->index('year');
                 $table->index('bedrooms');
+            });
+        } else {
+            Schema::table('listings', function (Blueprint $table) {
+                if (!Schema::hasColumn('listings', 'type')) {
+                    $table->string('type')->default('vehicle')->after('category_id');
+                }
+                if (!Schema::hasColumn('listings', 'rejection_reason')) {
+                    $table->text('rejection_reason')->nullable()->after('status');
+                }
+                if (!Schema::hasColumn('listings', 'year')) {
+                    $table->integer('year')->nullable()->after('rejection_reason');
+                }
+                if (!Schema::hasColumn('listings', 'bedrooms')) {
+                    $table->integer('bedrooms')->nullable()->after('year');
+                }
+                if (!Schema::hasColumn('listings', 'listing_attributes')) {
+                    $table->json('listing_attributes')->nullable()->after('bedrooms');
+                }
+                if (!Schema::hasColumn('listings', 'published_at')) {
+                    $table->timestamp('published_at')->nullable()->after('featured');
+                }
             });
         }
 
