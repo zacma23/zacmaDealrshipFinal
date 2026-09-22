@@ -4,7 +4,7 @@ import {
     ShieldAlert, Users, Layers, Clock, DollarSign, 
     CheckCircle2, XCircle, Settings, Tag, Sliders, 
     CreditCard, AlertTriangle, Eye, RefreshCw, Car,
-    ToggleLeft, ToggleRight, Plus, ChevronDown, ChevronRight, Shield
+    ToggleLeft, ToggleRight, Plus, ChevronDown, ChevronRight, Shield, Sparkles
 } from 'lucide-react';
 
 type AdminSubTab = 'overview' | 'approvals' | 'upgrades' | 'users' | 'categories' | 'plans' | 'transactions' | 'gateways' | 'vehicle-catalog';

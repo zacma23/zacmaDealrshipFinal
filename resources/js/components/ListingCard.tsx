@@ -161,7 +161,9 @@ export const ListingCard: React.FC<ListingCardProps> = ({
                         />
                         <span className="text-slate-600 font-medium truncate">{listing.seller?.name}</span>
                         {listing.seller?.is_verified && (
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" title="Verified Seller" />
+                            <span title="Verified Seller" className="inline-flex shrink-0">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            </span>
                         )}
                     </div>
                     <span className="text-[10px] text-slate-400 shrink-0">View Details →</span>
