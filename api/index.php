@@ -59,26 +59,32 @@ $_ENV['VIEW_COMPILED_PATH'] = '/tmp/storage/framework/views';
 $_SERVER['VIEW_COMPILED_PATH'] = '/tmp/storage/framework/views';
 
 // 4. Serverless drivers
-$logChannel = getenv('LOG_CHANNEL') ?: ($_ENV['LOG_CHANNEL'] ?? null);
-if (empty($logChannel)) {
-    putenv('LOG_CHANNEL=stderr');
-    $_ENV['LOG_CHANNEL'] = 'stderr';
-    $_SERVER['LOG_CHANNEL'] = 'stderr';
-}
+//
+// This front controller only ever runs inside the Vercel serverless function,
+// whose filesystem is read-only (except /tmp) and which has no long-running
+// worker. Any project-level env var that points session/cache/queue at a
+// stateful backend (a `database`/`redis` driver, a persistent file store, etc.)
+// will make ordinary requests try to reach a backend that isn't reliably
+// available here and return a 500. Force stateless, serverless-safe drivers
+// UNCONDITIONALLY so dashboard values cannot override them at runtime.
+$forceEnv = static function (string $key, string $value): void {
+    putenv("{$key}={$value}");
+    $_ENV[$key] = $value;
+    $_SERVER[$key] = $value;
+};
 
-$cacheStore = getenv('CACHE_STORE') ?: ($_ENV['CACHE_STORE'] ?? null);
-if (empty($cacheStore)) {
-    putenv('CACHE_STORE=array');
-    $_ENV['CACHE_STORE'] = 'array';
-    $_SERVER['CACHE_STORE'] = 'array';
-}
+// Logs must go to stderr (captured by Vercel); no writable log file exists.
+$forceEnv('LOG_CHANNEL', 'stderr');
 
-$sessionDriver = getenv('SESSION_DRIVER') ?: ($_ENV['SESSION_DRIVER'] ?? null);
-if (empty($sessionDriver)) {
-    putenv('SESSION_DRIVER=cookie');
-    $_ENV['SESSION_DRIVER'] = 'cookie';
-    $_SERVER['SESSION_DRIVER'] = 'cookie';
-}
+// Cache: in-request array store. There is no shared cache backend guaranteed
+// to be reachable, and the default `database` store requires a cache table.
+$forceEnv('CACHE_STORE', 'array');
+
+// Sessions: encrypted cookie store keeps sessions stateless across cold starts.
+$forceEnv('SESSION_DRIVER', 'cookie');
+
+// Queue: run jobs inline. There is no worker to drain a `database`/`redis` queue.
+$forceEnv('QUEUE_CONNECTION', 'sync');
 
 putenv('SESSION_LIFETIME=120');
 $_ENV['SESSION_LIFETIME'] = '120';
